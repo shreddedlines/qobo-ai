@@ -1,24 +1,22 @@
 /**
- * Asks the QOBO answer pipeline a question against the real knowledge base and Gemini.
- * Developer tool for M4 (the router and HTTP chat endpoint arrive in M5/M6).
+ * Sends one message through the full chat pipeline (router → QOBO answers, web
+ * research, fixed redirects) against the real knowledge base, Gemini and Tavily.
  *
  *   npm run ask -- "Is the ₹499 plan a monthly subscription?"
  */
 import { EnvValidationError, loadEnv } from '../../src/config/env.ts';
-import { createRagRuntime } from '../../src/rag/setup.ts';
+import { createChatRuntime } from '../../src/rag/setup.ts';
 
 async function main(): Promise<void> {
-  const question = process.argv.slice(2).join(' ').trim();
-  if (!question) throw new Error('Usage: npm run ask -- "your question"');
+  const message = process.argv.slice(2).join(' ').trim();
+  if (!message) throw new Error('Usage: npm run ask -- "your message"');
 
-  // Tavily is not used by the QOBO answer path; allow a placeholder until M5.
-  const env = loadEnv({ ...process.env, TAVILY_API_KEY: process.env.TAVILY_API_KEY || 'unused-in-m4' });
-  const { answerService } = createRagRuntime(env);
-  const answer = await answerService.answer({ question });
+  const { chatService } = createChatRuntime(loadEnv());
+  const reply = await chatService.respond({ message });
 
-  console.log(`\n${answer.content}\n`);
-  answer.sources.forEach((source, index) => console.log(`[${index + 1}] ${source.title} — ${source.url}`));
-  console.log(`\n${JSON.stringify({ status: answer.status, ...answer.metadata })}`);
+  console.log(`\n[${reply.intent} / ${reply.status}]\n\n${reply.content}\n`);
+  reply.sources.forEach((source, index) => console.log(`[${index + 1}] (${source.kind}) ${source.title} — ${source.url}`));
+  console.log(`\n${JSON.stringify(reply.metadata)}`);
 }
 
 main().catch((error: unknown) => {

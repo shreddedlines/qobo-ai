@@ -146,6 +146,15 @@ describe('authenticated Data API access (browser-equivalent)', () => {
 });
 
 describe('service role (backend)', () => {
+  it('can check the global web-search quota', async () => {
+    // A very high limit only counts one unit on the dev project; it never blocks real usage.
+    const { data, error } = await service.rpc('consume_global_quota', { p_kind: 'web_search', p_limit: 1_000_000 });
+    assert.equal(error, null);
+    const row = (data as Array<{ allowed: boolean; used: number }>)[0];
+    assert.equal(row?.allowed, true);
+    assert.ok((row?.used ?? 0) >= 1);
+  });
+
   it('passes a JSON array as a pgvector argument to match_kb_chunks', async () => {
     const embedding = new Array<number>(768).fill(0);
     embedding[0] = 1;

@@ -26,8 +26,11 @@ export interface QoboAnswer {
 }
 
 export interface QoboAnswerRequest {
+  /** The user's message, answered by the model. */
   question: string;
   history?: HistoryTurn[];
+  /** Self-contained rewrite used for retrieval (e.g. from the router for follow-ups). Defaults to `question`. */
+  retrievalQuery?: string;
 }
 
 export interface QoboAnswerService {
@@ -60,13 +63,14 @@ export interface QoboAnswerServiceDeps {
  */
 export function createQoboAnswerService({ retriever, generator, discrepancies = DISCREPANCIES, historyTurns = 6, now = Date.now }: QoboAnswerServiceDeps): QoboAnswerService {
   return {
-    async answer({ question, history = [] }) {
+    async answer({ question, history = [], retrievalQuery }) {
       const startedAt = now();
       const trimmedQuestion = question.trim();
+      const searchQuery = retrievalQuery?.trim() || trimmedQuestion;
 
       let chunks;
       try {
-        chunks = await retriever.retrieve(trimmedQuestion);
+        chunks = await retriever.retrieve(searchQuery);
       } catch (error) {
         throw new AnswerUnavailableError('retrieval', error);
       }
@@ -76,7 +80,7 @@ export function createQoboAnswerService({ retriever, generator, discrepancies = 
         topSimilarity: chunks.length > 0 ? Math.max(...chunks.map((chunk) => chunk.similarity)) : null,
         chunkIds: chunks.map((chunk) => chunk.id),
       };
-      const relevant = findRelevantDiscrepancies(trimmedQuestion, chunks, discrepancies);
+      const relevant = findRelevantDiscrepancies(`${trimmedQuestion}\n${searchQuery}`, chunks, discrepancies);
       let usedModel: string | null = null;
       const metadata = (outcome: QoboAnswerOutcome, guards: string[] = []): QoboAnswerMetadata => ({
         outcome,

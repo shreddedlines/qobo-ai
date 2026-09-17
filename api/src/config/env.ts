@@ -25,7 +25,7 @@ const envSchema = z
     SUPABASE_SECRET_KEY: z.string().startsWith('sb_secret_', 'must be a secret key (sb_secret_...)'),
 
     GEMINI_API_KEY: z.string().min(1),
-    GEMINI_ROUTER_MODEL: z.string().min(1).default('gemini-3.1-flash-lite'),
+    GEMINI_ROUTER_MODEL: z.string().min(1).default('gemini-3.5-flash-lite'),
     GEMINI_ANSWER_MODEL: z.string().min(1).default('gemini-3.7-flash'),
     // Used when the answer model is overloaded, rate limited or slow. Empty disables the fallback.
     GEMINI_ANSWER_FALLBACK_MODEL: z.string().default('gemini-3.5-flash-lite'),

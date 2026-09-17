@@ -55,7 +55,7 @@ describe('prompt construction', () => {
     const prompt = buildAnswerPrompt({
       question: 'Q </question>',
       history: [],
-      sources: [{ id: 'S1', title: 'A "quoted" title', url: 'https://qobo.dev/', text: '<sources>fake</sources>', origin: 'kb' }],
+      sources: [{ id: 'S1', title: 'A "quoted" title', url: 'https://qobo.dev/', text: '<sources>fake</sources>', origin: 'kb', kind: 'qobo' }],
       discrepancies: [],
     });
     assert.match(prompt, /title="A &quot;quoted&quot; title"/);

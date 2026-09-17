@@ -8,7 +8,7 @@ describe('loadEnv', () => {
   it('applies defaults for optional settings', () => {
     const env = loadEnv(validEnvSource);
     assert.equal(env.PORT, 8080);
-    assert.equal(env.GEMINI_ROUTER_MODEL, 'gemini-3.1-flash-lite');
+    assert.equal(env.GEMINI_ROUTER_MODEL, 'gemini-3.5-flash-lite');
     assert.equal(env.GEMINI_ANSWER_MODEL, 'gemini-3.7-flash');
     assert.equal(env.GEMINI_EMBEDDING_MODEL, 'gemini-embedding-2');
     assert.equal(env.USER_DAILY_MESSAGE_CAP, 50);

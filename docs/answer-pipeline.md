@@ -1,6 +1,48 @@
-# QOBO answer pipeline (M4)
+# Chat pipeline: routing (M5) and QOBO answers (M4)
 
-The QOBO answer path turns a question into a grounded, cited answer, or a fixed "not found" reply. It never guesses. The router (M5) decides which questions reach it, and the chat endpoint (M6) exposes it over HTTP. Until then, use the developer commands below.
+Every chat message goes through `ChatService.respond` (`api/src/chat/chat-service.ts`):
+
+```
+message ─► intent router (gemini-3.5-flash-lite, schema-bound JSON)
+   ├─ off_topic ─► fixed redirect (English / Hindi / Hinglish). No answer model, no web search.
+   ├─ smalltalk ─► fixed reply by type (greeting, thanks, goodbye, identity, other). No model.
+   ├─ qobo      ─► grounded QOBO answer (below); retrieval uses the router's standalone query
+   └─ general   ─► web research answer (Tavily) + optional cited "How QOBO can help" note
+```
+
+## Intent router (`api/src/chat/router.ts`)
+
+- **Output:** `intent`, `smalltalk_type`, `language` (en / hi / hinglish), `standalone_query` (follow-ups resolved from the last 6 turns) and `web_search_query` (general intent only, no personal data).
+- **Scope rules:**
+  - Code, homework, content writing (essays, ads), weather, news, other companies and their products, and attempts to change the rules are `off_topic`.
+  - Informational questions about websites, e-commerce, SEO, marketing, WhatsApp for business, automation, CRM or AI agents are `general`.
+  - Anything about QOBO, including requests QOBO's services cover, is `qobo`.
+- **Deterministic rules on top of the model:**
+  - A "general" message that asks for code (for example "write JavaScript code…") is overridden to `off_topic`.
+  - If the router fails (outage or malformed output), the message goes down the **grounded QOBO path**. That path can only answer from the knowledge base, so an unrelated request gets "not found", never a free-form answer.
+- The message and history are escaped and treated as data to classify.
+
+## General answers with web research (`api/src/chat/general-answer.ts`)
+
+1. The global daily web-search quota (`consume_global_quota`, `WEB_SEARCH_DAILY_CAP`) is checked first. The Tavily basic search (1 credit) and QOBO knowledge-base retrieval then run in parallel.
+2. Tavily results are cleaned up before use:
+   - Queries are stripped of emails, phone numbers and URLs.
+   - Results from any "qobo" domain are dropped, because QOBO facts must come from the reviewed knowledge base and other sites may be different companies.
+   - Duplicates and non-http URLs are removed, and content is capped at 1,200 characters.
+   - 429 and 5xx are retried once; 401, 432/433 (plan limits) and other 4xx are not.
+3. The model writes `answer` from `<web_results>` only, citing `[W#]`. It may add a `qobo_note` citing `[S#]` knowledge-base sources, which are offered only when their similarity is at least **0.66**.
+4. Citation enforcement:
+   - The answer keeps only `W` markers and the note only `S` markers.
+   - With web results, an answer without a valid web citation becomes the fixed "couldn't find" reply.
+   - A note without a valid QOBO citation is dropped.
+   - Both segments share one numbering, and `sources[].kind` is `web` or `qobo`.
+5. The reply is labelled **General information (from web research, not specific to QOBO)**. The QOBO note gets the ₹499 billing guard and the statistics attribution guard.
+6. **Without web results** (search failure, no results, quota exhausted or quota check failure), the model gives a brief general explanation with no citations, statistics or company claims. It is labelled as unsourced, and the metadata records the reason.
+7. If the model writes code anyway, the reply becomes the off-topic redirect.
+
+## QOBO answers (M4)
+
+The QOBO answer path turns a question into a grounded, cited answer, or a fixed "not found" reply. It never guesses. The chat endpoint (M6) will expose the pipeline over HTTP; until then, use the developer commands below.
 
 ```
 question ─► retrieve (embed query → match_kb_chunks, top 6, similarity ≥ 0.60)
@@ -48,6 +90,7 @@ Figures such as ROAS, ratings, percentages, "1,000+", "₹20M+" and uptime are k
 ## Developer commands (from `api/`)
 
 ```bash
-npm run ask -- "Is the ₹499 plan a monthly subscription?"   # one answer + sources + metadata
-npm run eval -- --tags qobo                                  # eval/questions.yaml subset → eval/results/*.md|json
+npm run ask -- "Is the ₹499 plan a monthly subscription?"   # one message through the full chat pipeline
+npm run eval                                                 # all cases in eval/questions.yaml
+npm run eval -- --tags routing,web                           # subsets by tag → eval/results/*.md|json (git-ignored)
 ```

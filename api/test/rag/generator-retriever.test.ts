@@ -242,6 +242,7 @@ describe('eval checks', () => {
     id: 'pricing-cost',
     tags: ['pricing'],
     question: 'How much?',
+    history: [],
     expect: { status: 'answered', citesAny: ['https://qobo.dev/plans'], containsAll: ['₹499'], containsAny: ['confirm'], notContains: ['₹4,999'] },
   };
 

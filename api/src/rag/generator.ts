@@ -5,24 +5,6 @@ import { googleRetryDelayMs } from '../lib/google-api-errors.ts';
 import { isTransientError, withRetry, type RetryOptions } from '../lib/retry.ts';
 import { ANSWER_RESPONSE_SCHEMA } from './prompts.ts';
 
-export interface AnswerDraft {
-  status: 'answered' | 'insufficient';
-  answer: string;
-  citations: string[];
-  /** Model that produced this draft (the fallback model when the primary was unavailable). */
-  model: string;
-}
-
-export interface GenerateInput {
-  systemInstruction: string;
-  prompt: string;
-}
-
-export interface AnswerGenerator {
-  readonly model: string;
-  generate(input: GenerateInput): Promise<AnswerDraft>;
-}
-
 export type GenerateContentClient = Pick<GoogleGenAI['models'], 'generateContent'>;
 
 /** The model returned nothing usable (blocked, empty or malformed JSON). Not retried. */
@@ -33,15 +15,9 @@ export class InvalidModelOutputError extends Error {
   }
 }
 
-const draftSchema = z.object({
-  status: z.enum(['answered', 'insufficient']),
-  answer: z.string(),
-  citations: z.array(z.string()).default([]),
-});
-
 type RetryPolicy = Pick<RetryOptions, 'retries' | 'baseDelayMs' | 'maxDelayMs' | 'giveUpIfServerDelayExceedsMs' | 'sleep' | 'random' | 'onRetry'>;
 
-export interface GeminiGeneratorOptions {
+export interface JsonGeneratorOptions {
   /**
    * Used when the primary model is overloaded (503), rate limited (429) or too slow.
    * Retrying an overloaded model mostly fails again, so the primary gets a single
@@ -62,6 +38,19 @@ export interface GeminiGeneratorOptions {
   onFallback?: (error: unknown) => void;
 }
 
+export interface JsonGenerateInput<T> {
+  systemInstruction: string;
+  prompt: string;
+  responseJsonSchema: unknown;
+  schema: z.ZodType<T>;
+}
+
+export interface JsonGenerator {
+  readonly model: string;
+  /** Resolves the parsed value and the model that produced it. */
+  generate<T>(input: JsonGenerateInput<T>): Promise<{ value: T; model: string }>;
+}
+
 /** Upstream conditions where another model may succeed: rate limits, server errors, timeouts, network failures. */
 export function isUnavailableModelError(error: unknown): boolean {
   if (isTransientError(error)) return true;
@@ -69,7 +58,7 @@ export function isUnavailableModelError(error: unknown): boolean {
   return name === 'AbortError' || name === 'TimeoutError';
 }
 
-export function createGeminiAnswerGenerator(client: GenerateContentClient, model: string, options: GeminiGeneratorOptions = {}): AnswerGenerator {
+export function createGeminiJsonGenerator(client: GenerateContentClient, model: string, options: JsonGeneratorOptions = {}): JsonGenerator {
   const {
     fallbackModel,
     retry = { retries: 2, baseDelayMs: 500, maxDelayMs: 8_000, giveUpIfServerDelayExceedsMs: 8_000 },
@@ -83,7 +72,7 @@ export function createGeminiAnswerGenerator(client: GenerateContentClient, model
   } = options;
   let primaryUnavailableUntil = 0;
 
-  async function attempt(targetModel: string, input: GenerateInput, policy: RetryPolicy, attemptTimeoutMs: number): Promise<AnswerDraft> {
+  async function attempt<T>(targetModel: string, input: JsonGenerateInput<T>, policy: RetryPolicy, attemptTimeoutMs: number): Promise<{ value: T; model: string }> {
     const response = await withRetry(
       () =>
         client.generateContent({
@@ -92,7 +81,7 @@ export function createGeminiAnswerGenerator(client: GenerateContentClient, model
           config: {
             systemInstruction: input.systemInstruction,
             responseMimeType: 'application/json',
-            responseJsonSchema: ANSWER_RESPONSE_SCHEMA,
+            responseJsonSchema: input.responseJsonSchema,
             thinkingConfig: { thinkingLevel },
             maxOutputTokens,
             abortSignal: AbortSignal.timeout(attemptTimeoutMs),
@@ -113,9 +102,9 @@ export function createGeminiAnswerGenerator(client: GenerateContentClient, model
     } catch (error) {
       throw new InvalidModelOutputError('Model output is not valid JSON', { cause: error });
     }
-    const draft = draftSchema.safeParse(parsed);
-    if (!draft.success) throw new InvalidModelOutputError('Model output does not match the answer schema', { cause: draft.error });
-    return { ...draft.data, model: targetModel };
+    const result = input.schema.safeParse(parsed);
+    if (!result.success) throw new InvalidModelOutputError('Model output does not match the response schema', { cause: result.error });
+    return { value: result.data, model: targetModel };
   }
 
   return {
@@ -131,6 +120,51 @@ export function createGeminiAnswerGenerator(client: GenerateContentClient, model
         onFallback?.(error);
         return attempt(fallbackModel, input, retry, fallbackTimeoutMs);
       }
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// QOBO answer drafts (M4 interface, unchanged)
+// ---------------------------------------------------------------------------
+
+export interface AnswerDraft {
+  status: 'answered' | 'insufficient';
+  answer: string;
+  citations: string[];
+  /** Model that produced this draft (the fallback model when the primary was unavailable). */
+  model: string;
+}
+
+export interface GenerateInput {
+  systemInstruction: string;
+  prompt: string;
+}
+
+export interface AnswerGenerator {
+  readonly model: string;
+  generate(input: GenerateInput): Promise<AnswerDraft>;
+}
+
+const draftSchema = z.object({
+  status: z.enum(['answered', 'insufficient']),
+  answer: z.string(),
+  citations: z.array(z.string()).default([]),
+});
+
+export type GeminiGeneratorOptions = JsonGeneratorOptions;
+
+export function createGeminiAnswerGenerator(client: GenerateContentClient, model: string, options: GeminiGeneratorOptions = {}): AnswerGenerator {
+  return fromJsonGenerator(createGeminiJsonGenerator(client, model, options));
+}
+
+/** Adapts a shared JSON generator (and its fallback cooldown) to the QOBO answer interface. */
+export function fromJsonGenerator(json: JsonGenerator): AnswerGenerator {
+  return {
+    model: json.model,
+    async generate({ systemInstruction, prompt }) {
+      const { value, model: usedModel } = await json.generate({ systemInstruction, prompt, responseJsonSchema: ANSWER_RESPONSE_SCHEMA, schema: draftSchema });
+      return { ...value, model: usedModel };
     },
   };
 }
