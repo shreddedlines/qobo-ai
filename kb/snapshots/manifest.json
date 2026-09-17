@@ -1,0 +1,315 @@
+{
+  "site": "https://qobo.dev",
+  "crawledAt": "2026-09-17T13:03:02.507Z",
+  "browser": "153.0.4234.32",
+  "pages": [
+    {
+      "path": "/",
+      "file": "home.md",
+      "type": "home",
+      "title": "QOBO Home",
+      "chars": 8536,
+      "contentHash": "fc956340c9dffc71bf68f78bd9ed215151d26a934b63e7cf22ea45fae386d5ff",
+      "prices": [
+        "₹0",
+        "₹20M",
+        "₹499/month"
+      ]
+    },
+    {
+      "path": "/ai-agents-builder",
+      "file": "ai-agents-builder.md",
+      "type": "service",
+      "title": "AI Agents Builder",
+      "chars": 1556,
+      "contentHash": "71e10f22051738f9e31e832544c7cac7fdcbd90a388fb6ec17b2c5d64fcc8faf",
+      "prices": []
+    },
+    {
+      "path": "/ai-automation-builder",
+      "file": "ai-automation-builder.md",
+      "type": "service",
+      "title": "AI Automation Builder",
+      "chars": 1574,
+      "contentHash": "a183249173fc62550f08ed00370e0f98635caeb1ad89f55b4b53e56ac412cb12",
+      "prices": []
+    },
+    {
+      "path": "/ai-voice-website-builder",
+      "file": "ai-voice-website-builder.md",
+      "type": "service",
+      "title": "AI Voice Website Builder",
+      "chars": 2129,
+      "contentHash": "b1871edbf904084fdf55aa27a2d201282e27918256908433f4063818d289e24b",
+      "prices": [
+        "₹499"
+      ]
+    },
+    {
+      "path": "/blog",
+      "file": "blog.md",
+      "type": "blog",
+      "title": "QOBO Blog",
+      "chars": 2054,
+      "contentHash": "156ea30eee31b7bdf8ebbd4b22000eaac2d67c03d02dc4d4b15c9a461b6e2b31",
+      "prices": []
+    },
+    {
+      "path": "/cancellation-refunds",
+      "file": "cancellation-refunds.md",
+      "type": "legal",
+      "title": "Cancellation & Refund Policy",
+      "chars": 1162,
+      "contentHash": "979e9247cbb8179c841d5cf1998b1254be1eb429d84ce0e91657002622d5eb37",
+      "prices": []
+    },
+    {
+      "path": "/contact-us",
+      "file": "contact-us.md",
+      "type": "contact",
+      "title": "Contact QOBO",
+      "chars": 755,
+      "contentHash": "c157caac3bc23c262c446c58a77fa205e72cf58c34f06431bfd8794b6bbcd58b",
+      "prices": []
+    },
+    {
+      "path": "/mobile-app-builder",
+      "file": "mobile-app-builder.md",
+      "type": "service",
+      "title": "Mobile App Builder",
+      "chars": 2435,
+      "contentHash": "71b877bf2bc92b02bc73895f821f28de3b8742fc2781cf432bb28fe2df9804f7",
+      "prices": []
+    },
+    {
+      "path": "/our-team",
+      "file": "our-team.md",
+      "type": "company",
+      "title": "QOBO Team",
+      "chars": 424,
+      "contentHash": "597f47af2d06da948ee4494fd57935bab2838beed7290224fb10b01fa9637f9e",
+      "prices": []
+    },
+    {
+      "path": "/plans",
+      "file": "plans.md",
+      "type": "pricing",
+      "title": "Plans & Pricing",
+      "chars": 1642,
+      "contentHash": "1eb2ff6e2fcbbbcd6926cf84dcdae072f87b36e018b9439bf08ab6e5c29e74e2",
+      "prices": [
+        "₹0",
+        "₹499",
+        "₹999"
+      ]
+    },
+    {
+      "path": "/privacy",
+      "file": "privacy.md",
+      "type": "legal",
+      "title": "Privacy Policy",
+      "chars": 1345,
+      "contentHash": "1a2fa05ed4f9f079080a263e0202f21056fa26ac6581c585636686142850a2d8",
+      "prices": []
+    },
+    {
+      "path": "/seo-services",
+      "file": "seo-services.md",
+      "type": "service",
+      "title": "SEO Services",
+      "chars": 2727,
+      "contentHash": "ce278045d49f22943f09f7789b527d4e96728cc172b2de507b45e6493d9788a4",
+      "prices": []
+    },
+    {
+      "path": "/shipping",
+      "file": "shipping.md",
+      "type": "legal",
+      "title": "Shipping & Delivery Policy",
+      "chars": 876,
+      "contentHash": "6a9972e8835ef4ad000cf1aabd40ce3465f4cc7c9c770679149622f566e768d3",
+      "prices": []
+    },
+    {
+      "path": "/social-media-service",
+      "file": "social-media-service.md",
+      "type": "service",
+      "title": "Social Media Marketing & Ads",
+      "chars": 3864,
+      "contentHash": "62165b621ec2f8e6c2ca959c2a90facf32ebc48ed933f0a1996fa0e2e24820cf",
+      "prices": []
+    },
+    {
+      "path": "/terms-and-conditions",
+      "file": "terms-and-conditions.md",
+      "type": "legal",
+      "title": "Terms and Conditions",
+      "chars": 1600,
+      "contentHash": "a987a1b97c02db99feee0f31aeff0bc3e3c1ed2b5106f5272bb11bf17e262409",
+      "prices": []
+    },
+    {
+      "path": "/website-builder-for-doctors",
+      "file": "website-builder-for-doctors.md",
+      "type": "industry",
+      "title": "Website Builder for Doctors & Clinics",
+      "chars": 2838,
+      "contentHash": "1200bc83227bbc041c3e75f7276597adce3c5c1dfd983d140765293da7f9d117",
+      "prices": []
+    },
+    {
+      "path": "/website-builder-for-farmers",
+      "file": "website-builder-for-farmers.md",
+      "type": "industry",
+      "title": "Website Builder for Farmers",
+      "chars": 1727,
+      "contentHash": "7793ed2004df01af56e6fe777cb08284f1cdf434c410202cfb0d749ae3efb0b2",
+      "prices": []
+    },
+    {
+      "path": "/website-builder-for-kirana-stores",
+      "file": "website-builder-for-kirana-stores.md",
+      "type": "industry",
+      "title": "Website Builder for Kirana Stores",
+      "chars": 1742,
+      "contentHash": "4330166a66c8888440db76ba87f48bb88e306d43770f74e0eda342e6658c8bf5",
+      "prices": []
+    },
+    {
+      "path": "/website-builder-for-ngos",
+      "file": "website-builder-for-ngos.md",
+      "type": "industry",
+      "title": "Website Builder for NGOs",
+      "chars": 2067,
+      "contentHash": "af0ee4200f79d312ae12dee40e3d85f1fcf5618ad3f2c5f858091fdef64b1361",
+      "prices": [
+        "₹499"
+      ]
+    },
+    {
+      "path": "/website-builder-for-photographers",
+      "file": "website-builder-for-photographers.md",
+      "type": "industry",
+      "title": "Website Builder for Photographers",
+      "chars": 2220,
+      "contentHash": "0eb26bcfa0d220524fef7707943e84f80db7500b3a78ec3113a46493b7dc878e",
+      "prices": [
+        "₹499"
+      ]
+    },
+    {
+      "path": "/website-builder-for-portfolio",
+      "file": "website-builder-for-portfolio.md",
+      "type": "industry",
+      "title": "Portfolio Website Builder",
+      "chars": 1542,
+      "contentHash": "d12548b9f3ca7f22cb3b2febaf652b93d49548b79baf92f5c7775d795ded86b2",
+      "prices": []
+    },
+    {
+      "path": "/website-builder-for-salons",
+      "file": "website-builder-for-salons.md",
+      "type": "industry",
+      "title": "Website Builder for Salons",
+      "chars": 1825,
+      "contentHash": "b50c96fff82f43715a5c27d6d64f300e8985cc295a9bb09b6427b673c9fc6473",
+      "prices": []
+    },
+    {
+      "path": "/website-builder-for-teachers",
+      "file": "website-builder-for-teachers.md",
+      "type": "industry",
+      "title": "Website Builder for Teachers & Coaches",
+      "chars": 2109,
+      "contentHash": "c33403e0651b2dedc985a6ef5518fd64c7869f3ffe876b14c0d64ceb62cd48ce",
+      "prices": [
+        "₹499"
+      ]
+    },
+    {
+      "path": "/whatsapp-website-builder",
+      "file": "whatsapp-website-builder.md",
+      "type": "service",
+      "title": "WhatsApp Website Builder",
+      "chars": 7258,
+      "contentHash": "55c3c4f2371d7903073ba2227e88f603079de197f64068fdc9d39b5537e610dd",
+      "prices": [
+        "₹499/month"
+      ]
+    },
+    {
+      "path": "/whatsapp-website-builder-hindi",
+      "file": "whatsapp-website-builder-hindi.md",
+      "type": "service",
+      "title": "WhatsApp Website Builder (Hindi)",
+      "chars": 2112,
+      "contentHash": "0701d6e74f7bd174bf8ec5cc6ed880967904fe469dcb7faad6b5e7a482f1b886",
+      "prices": [
+        "₹499"
+      ]
+    }
+  ],
+  "redirects": [
+    {
+      "from": "/ecommerce-website-builder",
+      "to": "/whatsapp-website-builder"
+    },
+    {
+      "from": "/portfolio-website-builder",
+      "to": "/whatsapp-website-builder"
+    },
+    {
+      "from": "/website-builder-for-services",
+      "to": "/whatsapp-website-builder"
+    }
+  ],
+  "skipped": [
+    {
+      "path": "/meta-ads-integration",
+      "reason": "renders the site 404 page"
+    },
+    {
+      "path": "/features",
+      "reason": "renders the site 404 page"
+    },
+    {
+      "path": "/pricing",
+      "reason": "renders the site 404 page"
+    },
+    {
+      "path": "/support",
+      "reason": "renders the site 404 page"
+    },
+    {
+      "path": "/terms",
+      "reason": "renders the site 404 page"
+    },
+    {
+      "path": "/blog/build-website-60-seconds",
+      "reason": "renders the site 404 page"
+    },
+    {
+      "path": "/blog/before-after-transformations",
+      "reason": "renders the site 404 page"
+    },
+    {
+      "path": "/blog/generate-more-leads-growth",
+      "reason": "renders the site 404 page"
+    },
+    {
+      "path": "/blog/whatsapp-marketing-sales-automation",
+      "reason": "renders the site 404 page"
+    },
+    {
+      "path": "/blog/building-startup-lessons-failures",
+      "reason": "renders the site 404 page"
+    },
+    {
+      "path": "/blog/why-qobo-ai-operating-system",
+      "reason": "renders the site 404 page"
+    }
+  ],
+  "removedSnapshots": [],
+  "boilerplateRemoved": [],
+  "issues": []
+}

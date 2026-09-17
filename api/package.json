@@ -1,0 +1,55 @@
+{
+  "name": "qobo-support-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "QOBO AI customer support chatbot — Express/TypeScript backend",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env --watch src/server.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "test:watch": "node --test --watch \"test/**/*.test.ts\"",
+    "test:hosted": "node --env-file-if-exists=.env.test --test \"test-hosted/**/*.test.ts\"",
+    "ingest:crawl": "node scripts/ingest/crawl.ts",
+    "ingest:build": "node --env-file-if-exists=.env scripts/ingest/build-kb.ts",
+    "ingest:verify": "node --env-file-if-exists=.env scripts/ingest/verify-kb.ts"
+  },
+  "dependencies": {
+    "@google/genai": "2.23.0",
+    "@supabase/supabase-js": "2.116.0",
+    "cors": "2.8.6",
+    "express": "5.2.1",
+    "express-rate-limit": "8.7.0",
+    "helmet": "8.3.0",
+    "pino": "10.3.1",
+    "yaml": "2.9.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
+    "@electric-sql/pglite-pgvector": "0.0.9",
+    "@eslint/js": "10.0.1",
+    "@types/cors": "2.8.19",
+    "@types/express": "5.0.6",
+    "@types/node": "24.13.5",
+    "@types/pg": "8.23.1",
+    "@types/supertest": "7.2.1",
+    "eslint": "10.10.0",
+    "globals": "17.12.0",
+    "pg": "8.23.0",
+    "playwright-core": "1.63.0",
+    "supertest": "7.2.2",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.70.0"
+  },
+  "allowScripts": {
+    "@google/genai": false,
+    "protobufjs": false
+  }
+}

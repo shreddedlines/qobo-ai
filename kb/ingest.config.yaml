@@ -1,0 +1,129 @@
+# Knowledge-base crawl configuration for https://qobo.dev (a client-rendered SPA).
+# Every change here should be reviewed together with the resulting kb/snapshots diff.
+
+site: https://qobo.dev
+sitemap: https://qobo.dev/sitemap.xml
+
+maxPages: 60
+requestDelayMs: 600
+navigationTimeoutMs: 45000
+
+# Live routes that the sitemap does not list (found in the SPA router table).
+extraPaths:
+  - /our-team
+  - /social-media-service
+  - /website-builder-for-doctors
+  - /website-builder-for-portfolio
+
+# Regular expressions matched against the path.
+excludePathPatterns: []
+
+# Short lines (CTA labels, nav items) repeated on at least this share of pages are dropped.
+boilerplate:
+  maxLineLength: 40
+  minPages: 4
+  pageShare: 0.5
+
+# A page whose cleaned content shrinks below this fraction of its previous snapshot
+# is flagged: it usually means rendering failed, not that QOBO deleted content.
+shrinkThreshold: 0.5
+
+pageTypes:
+  - { pattern: "^/$", type: home }
+  - { pattern: "^/plans$", type: pricing }
+  - { pattern: "^/contact-us$", type: contact }
+  - { pattern: "^/our-team$", type: company }
+  - { pattern: "^/blog", type: blog }
+  - { pattern: "^/(privacy|terms-and-conditions|cancellation-refunds|shipping)$", type: legal }
+  - { pattern: "^/website-builder-for-", type: industry }
+  - { pattern: ".*", type: service }
+
+# Per-page interaction and cleaning rules (keys are paths).
+# `exclude` hides decorative UI mock-ups (fake demo data) before capture: the
+# smallest element(s) containing every listed phrase are removed.
+#
+# `title` gives each page a descriptive name for citations; the on-page h1 is
+# usually a marketing headline ("CHAT TO APP STORE IN 5 MINS.").
+pages:
+  /ai-automation-builder: { title: AI Automation Builder }
+  /ai-voice-website-builder: { title: AI Voice Website Builder }
+  /blog: { title: QOBO Blog }
+  /cancellation-refunds: { title: Cancellation & Refund Policy }
+  /contact-us: { title: Contact QOBO }
+  /mobile-app-builder: { title: Mobile App Builder }
+  /our-team: { title: QOBO Team }
+  /privacy: { title: Privacy Policy }
+  /seo-services: { title: SEO Services, clickTexts: [On-Page SEO, Off-Page SEO, Keyword Optimization, Technical SEO] }
+  /shipping: { title: Shipping & Delivery Policy }
+  /social-media-service: { title: Social Media Marketing & Ads }
+  /terms-and-conditions: { title: Terms and Conditions }
+  /website-builder-for-kirana-stores: { title: Website Builder for Kirana Stores }
+  /website-builder-for-ngos: { title: Website Builder for NGOs }
+  /website-builder-for-photographers: { title: Website Builder for Photographers }
+  /website-builder-for-portfolio: { title: Portfolio Website Builder }
+  /website-builder-for-teachers: { title: Website Builder for Teachers & Coaches }
+  /whatsapp-website-builder: { title: WhatsApp Website Builder }
+  /whatsapp-website-builder-hindi: { title: WhatsApp Website Builder (Hindi) }
+  /:
+    title: QOBO Home
+    exclude:
+      # The showcase container is always rendered; only the fictional ad inside rotates
+      # (Instagram / Facebook / Google variants with "50% OFF" offers), so anchor on the container.
+      - containsAll: ["Live Traffic", "One Campaign"]
+        reason: Rotating showcase of example ads with fictional offers
+  /plans:
+    title: Plans & Pricing
+    # The plan cards rotate every 4s; sample long enough to see every card twice.
+    sampleMs: 18000
+  /ai-agents-builder:
+    title: AI Agents Builder
+    exclude:
+      - containsAll: ["CUSTOMER (11:45 PM)", "Shipping is just"]
+        reason: Demo chat between a fictional customer and an agent
+  /website-builder-for-salons:
+    title: Website Builder for Salons
+    exclude:
+      - containsAll: ["Balayage Master", "Bridal Prep"]
+        reason: Example salon booking card with fictional service prices
+  /website-builder-for-doctors:
+    title: Website Builder for Doctors & Clinics
+    exclude:
+      - containsAll: ["12 Patients", "General Checkup", "SCHEDULE NOW"]
+        reason: Example clinic dashboard with fictional consultation fees
+  /website-builder-for-farmers:
+    title: Website Builder for Farmers
+    exclude:
+      # The card rotates products (carrots/tomatoes/spinach), so anchor on the fixed parts.
+      - containsAll: ["Green Valley", "Certified Organic Produce", "Order via WhatsApp"]
+        reason: Example farm store card with fictional produce prices
+      - containsAll: ["WhatsApp received:"]
+        reason: Example price-update notification with a fictional produce price
+
+# Every ₹ amount found in cleaned content must be listed here for the pages it
+# appears on, otherwise the crawl fails. This stops prices from decorative UI
+# mock-ups entering the knowledge base and surfaces real price changes for review.
+# Use "*" to allow a price on any page.
+prices:
+  - value: "₹0"
+    pages: [/, /plans]
+    note: Trial plan price on /plans and "₹0 setup cost" on the home page
+  - value: "₹499"
+    pages: ["*"]
+    note: Starter plan price on /plans; industry pages say "Starting at just ₹499"
+  - value: "₹999"
+    pages: [/plans]
+    note: Pro plan price on /plans
+  - value: "₹499/month"
+    pages: [/, /whatsapp-website-builder]
+    note: FAQ answer "starting at ₹499/month" CONFLICTS with the one-time pricing on /plans (see kb/discrepancies.yaml)
+  - value: "₹20M"
+    pages: [/]
+    note: Marketing claim "₹20M+ client revenue generated"; attribute to the website, never present as a guarantee
+
+# Topic tags on chunks. The API uses them to attach known-discrepancy notes
+# (kb/discrepancies.yaml) whenever a matching chunk is retrieved.
+topics:
+  - name: pricing
+    patterns: ["₹", "\\bprice", "\\bpricing\\b", "\\bplans?\\b", "subscription", "one-time", "free trial", "zero-cost", "\\bcost\\b", "\\brefund"]
+  - name: contact
+    patterns: ["wa\\.me/", "tel:", "mailto:", "\\+91 ?\\d{5}"]

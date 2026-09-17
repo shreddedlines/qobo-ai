@@ -1,0 +1,25 @@
+{
+  // Type-checking config for everything (src, tests, scripts).
+  // Source files import each other with explicit `.ts` extensions so Node 24 can
+  // run them directly (type stripping) in dev and tests; `tsconfig.build.json`
+  // rewrites those extensions to `.js` when emitting `dist/` for production.
+  "compilerOptions": {
+    "target": "ES2024",
+    "lib": ["ES2024"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "isolatedModules": true,
+    "rewriteRelativeImportExtensions": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["src", "test", "test-hosted", "scripts"]
+}
