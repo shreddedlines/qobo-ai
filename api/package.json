@@ -20,7 +20,10 @@
     "ingest:build": "node --env-file-if-exists=.env scripts/ingest/build-kb.ts",
     "ingest:verify": "node --env-file-if-exists=.env scripts/ingest/verify-kb.ts",
     "ask": "node --env-file-if-exists=.env scripts/chat/ask.ts",
-    "eval": "node --env-file-if-exists=.env scripts/eval/run.ts"
+    "eval": "node --env-file-if-exists=.env scripts/eval/run.ts",
+    "smoke": "node --env-file-if-exists=.env.smoke scripts/smoke.ts",
+    "ingest:build:prod": "node --env-file-if-exists=.env.prod scripts/ingest/build-kb.ts",
+    "ingest:verify:prod": "node --env-file-if-exists=.env.prod scripts/ingest/verify-kb.ts"
   },
   "dependencies": {
     "@google/genai": "2.23.0",

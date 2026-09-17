@@ -1,0 +1,43 @@
+name: Keep API and database awake
+
+# Render free web services sleep after 15 minutes idle (~1 minute to wake), and
+# Supabase free projects pause after a week of inactivity. The deep health check
+# queries the database, so one ping keeps both awake.
+#
+# Setup: repository → Settings → Variables → Actions → new variable
+#   API_BASE_URL = https://<your-service>.onrender.com
+#
+# Note: GitHub may delay scheduled runs under load, and disables schedules in
+# public repositories after 60 days without activity. For a demo that must always
+# respond, use an uptime monitor or a paid Render instance instead.
+on:
+  schedule:
+    - cron: '*/12 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping deep health check
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+        run: |
+          if [ -z "$API_BASE_URL" ]; then
+            echo "API_BASE_URL variable is not set; skipping."
+            exit 0
+          fi
+          # Allow up to 2 minutes for a cold start, and retry once.
+          for attempt in 1 2; do
+            body=$(curl -sS --max-time 120 --retry 1 --retry-delay 10 -w '\n%{http_code}' "$API_BASE_URL/api/health?deep=1") && status=$(echo "$body" | tail -1) || status=000
+            echo "attempt $attempt → HTTP $status: $(echo "$body" | head -1)"
+            [ "$status" = "200" ] && exit 0
+            sleep 20
+          done
+          echo "Deep health check did not return 200"
+          exit 1

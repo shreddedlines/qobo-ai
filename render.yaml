@@ -1,0 +1,68 @@
+# Render Blueprint for the QOBO support API.
+# Create the service from this file: Render Dashboard → New → Blueprint → pick this repo.
+# Secrets use `sync: false`: Render prompts for them on first apply and never stores
+# them in git. See docs/deployment.md.
+services:
+  - type: web
+    name: qobo-support-api
+    runtime: node
+    plan: free
+    # Closest supported region to the Supabase project (South Asia / Mumbai).
+    region: singapore
+    rootDir: api
+    # --include=dev: the production build needs TypeScript, which is a devDependency.
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    # Liveness only. The deep check (?deep=1) also queries the database, so a database
+    # blip must not make Render restart a healthy instance.
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      # Render terminates TLS and proxies to the app: one hop, needed for correct
+      # client IPs in the per-IP rate limiters.
+      - key: TRUST_PROXY_HOPS
+        value: 1
+      # Exact browser origins allowed to call the API (no trailing slash).
+      # Set to the deployed frontend URL; update when the web app is deployed (M9).
+      - key: CORS_ORIGINS
+        sync: false
+
+      # Supabase (qobo-prod project)
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+
+      # Gemini + Tavily
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: GEMINI_ROUTER_MODEL
+        value: gemini-3.5-flash-lite
+      - key: GEMINI_ANSWER_MODEL
+        value: gemini-3.7-flash
+      - key: GEMINI_ANSWER_FALLBACK_MODEL
+        value: gemini-3.5-flash-lite
+      - key: GEMINI_EMBEDDING_MODEL
+        value: gemini-embedding-2
+
+      # Abuse and cost controls
+      - key: USER_DAILY_MESSAGE_CAP
+        value: 50
+      - key: WEB_SEARCH_DAILY_CAP
+        value: 100
+      - key: API_RATE_LIMIT_PER_MINUTE
+        value: 120
+      - key: CHAT_RATE_LIMIT_PER_MINUTE
+        value: 20
+      - key: CHAT_REQUEST_TIMEOUT_MS
+        value: 45000
+      # Knowledge-base ingestion runs locally, never on the server:
+      # DATABASE_URL and DATABASE_CA_CERT_PATH are deliberately not set here.

@@ -8,6 +8,8 @@ coverage/
 .env.*
 !.env.example
 !.env.test.example
+!.env.prod.example
+!.env.smoke.example
 
 # Supabase CLI local state
 supabase/.temp/

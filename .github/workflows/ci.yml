@@ -1,0 +1,30 @@
+name: CI
+
+# Runs the hermetic checks only: unit, API and database tests (Postgres runs
+# in-process via PGlite). The hosted Supabase suite and the live eval need
+# credentials and are run locally.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build

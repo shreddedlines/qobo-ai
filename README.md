@@ -12,7 +12,8 @@ An AI support assistant for [QOBO](https://qobo.dev/) that answers questions gro
 | `supabase/migrations/` | Postgres schema, grants, Row Level Security, SQL functions |
 | `kb/` | Knowledge-base crawl config, reviewed page snapshots of qobo.dev |
 | `eval/` | Evaluation questions and generated result reports |
-| `docs/` | Guides: [Supabase setup](docs/supabase-setup.md), [knowledge base](docs/knowledge-base.md), [chat and answer pipeline](docs/answer-pipeline.md), [HTTP API](docs/api.md) |
+| `docs/` | Guides: [Supabase setup](docs/supabase-setup.md), [knowledge base](docs/knowledge-base.md), [chat and answer pipeline](docs/answer-pipeline.md), [HTTP API](docs/api.md), [deployment](docs/deployment.md) |
+| `render.yaml`, `.github/workflows/` | Render blueprint, CI checks and the keep-alive ping |
 | `web/` | React + Vite frontend (not started) |
 
 ## Stack
@@ -21,6 +22,7 @@ An AI support assistant for [QOBO](https://qobo.dev/) that answers questions gro
 - **Database/Auth:** Supabase Auth, Postgres, pgvector
 - **AI:** Gemini (routing, answers, `gemini-embedding-2` embeddings), Tavily (web research)
 - **Ingestion:** Playwright (qobo.dev is a client-rendered SPA)
+- **Hosting:** Render (API), Vercel (frontend, later)
 - **Tests:** Node's built-in test runner (`node:test`) + supertest
 
 ## Backend quick start
@@ -44,5 +46,7 @@ npm run dev            # http://localhost:8080/api/health
 | `npm run ingest:verify` | Checks the stored knowledge base and prints top retrieval matches for sample questions |
 | `npm run ask -- "message"` | Sends one message through the full chat pipeline (router, QOBO answers, web research, redirects) |
 | `npm run eval` | Runs `eval/questions.yaml` through the live chat pipeline (`--tags routing,web` for subsets); reports go to git-ignored `eval/results/` |
+| `npm run smoke -- <url>` | Smoke-tests a deployed API (health, auth, CORS, one real chat turn) |
+| `npm run ingest:build:prod` / `ingest:verify:prod` | Builds and verifies the knowledge base in the production project |
 
 Environment variables are documented in [`api/.env.example`](api/.env.example) and validated at startup; the server refuses to start with missing or malformed configuration.
