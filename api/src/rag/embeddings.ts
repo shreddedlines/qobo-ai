@@ -49,14 +49,16 @@ export interface GeminiEmbedderOptions {
    */
   rateLimiter?: RateLimiter;
   /** Retry policy per batch. HTTP 429 waits at least the server-provided retryDelay. */
-  retry?: Pick<RetryOptions, 'retries' | 'baseDelayMs' | 'maxDelayMs' | 'onRetry' | 'sleep' | 'random'>;
+  retry?: Pick<RetryOptions, 'retries' | 'baseDelayMs' | 'maxDelayMs' | 'giveUpIfServerDelayExceedsMs' | 'onRetry' | 'sleep' | 'random'>;
+  /** Per-attempt request timeout. */
+  timeoutMs?: number;
   onBatchComplete?: (embedded: number, total: number) => void;
 }
 
 const DEFAULT_RETRY = { retries: 5, baseDelayMs: 1_000, maxDelayMs: 120_000 };
 
 export function createGeminiEmbedder(client: EmbedContentClient, model: string, options: GeminiEmbedderOptions = {}): Embedder {
-  const { batchSize = 20, rateLimiter, retry = DEFAULT_RETRY, onBatchComplete } = options;
+  const { batchSize = 20, rateLimiter, retry = DEFAULT_RETRY, timeoutMs, onBatchComplete } = options;
 
   async function embedBatch(batch: string[]): Promise<number[][]> {
     const response = await withRetry(
@@ -67,7 +69,7 @@ export function createGeminiEmbedder(client: EmbedContentClient, model: string, 
           // Each text MUST be its own Content object: gemini-embedding-2 aggregates
           // plain multi-part input into a single embedding.
           contents: batch.map((text) => ({ role: 'user', parts: [{ text }] })),
-          config: { outputDimensionality: EMBEDDING_DIM },
+          config: { outputDimensionality: EMBEDDING_DIM, ...(timeoutMs ? { abortSignal: AbortSignal.timeout(timeoutMs) } : {}) },
         });
       },
       { ...DEFAULT_RETRY, ...retry, serverDelayMs: googleRetryDelayMs },

@@ -11,7 +11,8 @@ An AI support assistant for [QOBO](https://qobo.dev/) that answers questions gro
 | `api/` | Express 5 + TypeScript backend (Node 24): auth verification, chat pipeline, RAG, ingestion scripts |
 | `supabase/migrations/` | Postgres schema, grants, Row Level Security, SQL functions |
 | `kb/` | Knowledge-base crawl config, reviewed page snapshots of qobo.dev |
-| `docs/` | Guides: [Supabase setup](docs/supabase-setup.md), [knowledge base](docs/knowledge-base.md) |
+| `eval/` | Evaluation questions and generated result reports |
+| `docs/` | Guides: [Supabase setup](docs/supabase-setup.md), [knowledge base](docs/knowledge-base.md), [answer pipeline](docs/answer-pipeline.md) |
 | `web/` | React + Vite frontend (not started) |
 
 ## Stack
@@ -41,5 +42,7 @@ npm run dev            # http://localhost:8080/api/health
 | `npm run ingest:crawl` | Renders qobo.dev in headless Edge and writes reviewable snapshots to `kb/snapshots/` |
 | `npm run ingest:build` | Chunks, embeds (rate-limited, retries 429s) and loads reviewed snapshots into Supabase (`--dry-run` for stats only) |
 | `npm run ingest:verify` | Checks the stored knowledge base and prints top retrieval matches for sample questions |
+| `npm run ask -- "question"` | Runs the grounded QOBO answer pipeline once (answer, citations, metadata) |
+| `npm run eval -- --tags qobo` | Runs `eval/questions.yaml` against the live pipeline and writes a report to `eval/results/` |
 
 Environment variables are documented in [`api/.env.example`](api/.env.example) and validated at startup; the server refuses to start with missing or malformed configuration.

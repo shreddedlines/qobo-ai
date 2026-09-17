@@ -2,9 +2,10 @@ import { createApp } from './app.ts';
 import { createSupabaseTokenVerifier } from './auth/token-verifier.ts';
 import { EnvValidationError, loadEnv, type Env } from './config/env.ts';
 import { createSupabaseConversationStore } from './conversations/store.ts';
-import { createAuthClient } from './db/supabase.ts';
+import { createAuthClient, createServiceClient } from './db/supabase.ts';
 import { createSupabaseHealthCheck } from './health/routes.ts';
 import { createLogger } from './lib/logger.ts';
+import { checkKnowledgeBase } from './rag/kb-compat.ts';
 
 function readEnvOrExit(): Env {
   try {
@@ -18,9 +19,17 @@ function readEnvOrExit(): Env {
   }
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const env = readEnvOrExit();
   const logger = createLogger(env);
+
+  const knowledgeBase = await checkKnowledgeBase(createServiceClient(env), env.GEMINI_EMBEDDING_MODEL);
+  if (knowledgeBase.status === 'mismatch') {
+    logger.fatal({ knowledgeBase }, 'knowledge base is incompatible with the configured embedding model');
+    process.exit(1);
+  }
+  if (knowledgeBase.status === 'ok') logger.info({ knowledgeBase }, 'knowledge base ready');
+  else logger.warn({ knowledgeBase }, 'knowledge base not ready; QOBO answers will fall back to contact details');
 
   const app = createApp({
     env,
@@ -43,4 +52,7 @@ function main(): void {
   process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
-main();
+main().catch((error: unknown) => {
+  process.stderr.write(`Fatal startup error: ${error instanceof Error ? error.message : String(error)}\n`);
+  process.exit(1);
+});

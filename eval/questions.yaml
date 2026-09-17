@@ -1,0 +1,131 @@
+# Evaluation questions with rule-based expectations.
+# Checks are case-insensitive substring matches on the final answer text.
+# M4 covers the QOBO answer path (tags: qobo, pricing, statistics); M5 adds routing,
+# refusals and web research.
+
+- id: what-is-qobo
+  tags: [qobo]
+  question: What is QOBO?
+  expect:
+    status: answered
+    citesAny: ["https://qobo.dev/"]
+    containsAny: [launch, grow, automate]
+
+- id: services
+  tags: [qobo]
+  question: What services does QOBO provide?
+  expect:
+    status: answered
+    containsAny: [SEO, automation, marketing]
+    containsAll: [website]
+
+- id: ecommerce
+  tags: [qobo]
+  question: Can QOBO create an e-commerce website?
+  expect:
+    status: answered
+    citesAny: ["https://qobo.dev/whatsapp-website-builder", "https://qobo.dev/"]
+    containsAny: [UPI, catalog, e-commerce, ecommerce, online store]
+
+- id: how-builder-works
+  tags: [qobo]
+  question: How does QOBO's website builder work?
+  expect:
+    status: answered
+    containsAll: [WhatsApp]
+
+- id: refunds
+  tags: [qobo]
+  question: Can I get a refund if I cancel?
+  expect:
+    status: answered
+    citesAny: ["https://qobo.dev/cancellation-refunds"]
+    containsAny: ["24 hours", "7-14", "7–14", "business days"]
+
+- id: founder
+  tags: [qobo]
+  question: Who founded QOBO?
+  expect:
+    status: answered
+    containsAll: [Gaurav Save]
+
+- id: whatsapp-number
+  tags: [qobo]
+  question: What is QOBO's WhatsApp number?
+  expect:
+    status: answered
+    containsAll: ["99016 31188"]
+
+- id: unsupported-office
+  tags: [qobo]
+  question: Does QOBO have an office in London?
+  expect:
+    status: insufficient
+
+- id: pricing-cost
+  tags: [qobo, pricing]
+  question: How much does a QOBO website cost?
+  expect:
+    status: answered
+    citesAny: ["https://qobo.dev/plans", "https://qobo.dev/"]
+    containsAll: ["₹499"]
+    containsAny: [confirm]
+    notContains: ["₹2,499", "₹4,999", "₹35/kg", "₹40/kg"]
+
+- id: pricing-billing-model
+  tags: [qobo, pricing]
+  question: Is the ₹499 plan a one-time payment or a monthly subscription?
+  expect:
+    status: answered
+    containsAll: ["₹499"]
+    containsAny: [confirm]
+
+- id: pricing-lifetime
+  tags: [qobo, pricing]
+  question: So if I pay ₹499 once, I own my website for life, right?
+  expect:
+    status: answered
+    containsAny: [confirm]
+
+- id: pricing-pro
+  tags: [qobo, pricing]
+  question: What does the Pro plan cost and what do I get?
+  expect:
+    status: answered
+    containsAll: ["₹999"]
+
+- id: pricing-free-trial
+  tags: [qobo, pricing]
+  question: Is there a free trial?
+  expect:
+    status: answered
+    containsAny: [free]
+
+- id: pricing-hinglish
+  tags: [qobo, pricing]
+  question: Website banane ka price kitna hai?
+  expect:
+    status: answered
+    containsAll: ["₹499"]
+    containsAny: [confirm, "पुष्टि", "confirm kar"]
+
+- id: mockup-prices
+  tags: [qobo, pricing]
+  question: How much does bridal prep cost on a salon website built by QOBO?
+  expect:
+    notContains: ["₹4,999", "₹2,499"]
+
+- id: stats-roas
+  tags: [qobo, statistics]
+  question: What ROAS do your ad campaigns achieve?
+  expect:
+    status: answered
+    containsAny: [website]
+    notContains: [we guarantee, guaranteed ROAS]
+
+- id: stats-websites-count
+  tags: [qobo, statistics]
+  question: How many websites has QOBO created?
+  expect:
+    status: answered
+    containsAll: ["1,000+", "5,000+"]

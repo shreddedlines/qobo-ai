@@ -13,6 +13,11 @@ export interface RetryOptions {
   isRetryable?: (error: unknown) => boolean;
   /** Server-requested wait for this error (e.g. a 429 RetryInfo), if any. */
   serverDelayMs?: (error: unknown) => number | undefined;
+  /**
+   * Interactive callers: rethrow instead of retrying when the server asks us to wait
+   * longer than this (a retry before the requested delay would just fail again).
+   */
+  giveUpIfServerDelayExceedsMs?: number;
   onRetry?: (info: RetryAttemptInfo) => void;
   sleep?: (ms: number) => Promise<void>;
   random?: () => number;
@@ -37,6 +42,7 @@ export async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions):
     maxDelayMs = 120_000,
     isRetryable = isTransientError,
     serverDelayMs = () => undefined,
+    giveUpIfServerDelayExceedsMs = Number.POSITIVE_INFINITY,
     onRetry,
     sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     random = Math.random,
@@ -47,9 +53,11 @@ export async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions):
       return await fn();
     } catch (error) {
       if (attempt >= retries || !isRetryable(error)) throw error;
+      const requested = serverDelayMs(error) ?? 0;
+      if (requested > giveUpIfServerDelayExceedsMs) throw error;
       const backoff = baseDelayMs * 2 ** attempt;
       const jitter = Math.floor(random() * backoff * 0.25);
-      const delayMs = Math.min(maxDelayMs, Math.max(serverDelayMs(error) ?? 0, backoff) + jitter);
+      const delayMs = Math.min(maxDelayMs, Math.max(requested, backoff) + jitter);
       onRetry?.({ attempt: attempt + 1, delayMs, error });
       await sleep(delayMs);
     }

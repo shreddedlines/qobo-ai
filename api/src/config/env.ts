@@ -27,7 +27,15 @@ const envSchema = z
     GEMINI_API_KEY: z.string().min(1),
     GEMINI_ROUTER_MODEL: z.string().min(1).default('gemini-3.1-flash-lite'),
     GEMINI_ANSWER_MODEL: z.string().min(1).default('gemini-3.7-flash'),
+    // Used when the answer model is overloaded, rate limited or slow. Empty disables the fallback.
+    GEMINI_ANSWER_FALLBACK_MODEL: z.string().default('gemini-3.5-flash-lite'),
     GEMINI_EMBEDDING_MODEL: z.string().min(1).default('gemini-embedding-2'),
+    // Shared by every embedding call in this process (free tier: 100 requests/minute).
+    GEMINI_EMBED_REQUESTS_PER_MINUTE: z.coerce.number().int().min(1).max(10_000).default(90),
+
+    // Retrieval: similarity floor calibrated on the real KB (off-topic ≈0.54–0.57, QOBO questions ≈0.68–0.81).
+    KB_MATCH_COUNT: z.coerce.number().int().min(1).max(20).default(6),
+    KB_MIN_SIMILARITY: z.coerce.number().min(0).max(1).default(0.6),
 
     TAVILY_API_KEY: z.string().min(1),
 

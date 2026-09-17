@@ -29,3 +29,6 @@ kb/.build/
 
 # Downloaded Supabase CA certificates (public, but machine-specific)
 api/certs/
+
+# Generated eval reports (full model answers); publish deliberately, never by default
+eval/results/

@@ -18,7 +18,9 @@
     "test:hosted": "node --env-file-if-exists=.env.test --test \"test-hosted/**/*.test.ts\"",
     "ingest:crawl": "node scripts/ingest/crawl.ts",
     "ingest:build": "node --env-file-if-exists=.env scripts/ingest/build-kb.ts",
-    "ingest:verify": "node --env-file-if-exists=.env scripts/ingest/verify-kb.ts"
+    "ingest:verify": "node --env-file-if-exists=.env scripts/ingest/verify-kb.ts",
+    "ask": "node --env-file-if-exists=.env scripts/chat/ask.ts",
+    "eval": "node --env-file-if-exists=.env scripts/eval/run.ts"
   },
   "dependencies": {
     "@google/genai": "2.23.0",

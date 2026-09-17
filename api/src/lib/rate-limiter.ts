@@ -6,8 +6,23 @@ export interface RateLimiter {
 export interface SlidingWindowOptions {
   limit: number;
   windowMs: number;
+  /**
+   * Interactive callers (chat) should not queue for a whole window. When the wait
+   * for capacity would exceed this, `acquire` rejects with RateLimitExceededError.
+   */
+  maxWaitMs?: number;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
+}
+
+export class RateLimitExceededError extends Error {
+  readonly retryAfterMs: number;
+
+  constructor(retryAfterMs: number) {
+    super(`Local rate limit reached; capacity frees up in ${Math.ceil(retryAfterMs / 1000)}s`);
+    this.name = 'RateLimitExceededError';
+    this.retryAfterMs = retryAfterMs;
+  }
 }
 
 /**
@@ -18,6 +33,7 @@ export interface SlidingWindowOptions {
 export function createSlidingWindowLimiter({
   limit,
   windowMs,
+  maxWaitMs = Number.POSITIVE_INFINITY,
   now = Date.now,
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 }: SlidingWindowOptions): RateLimiter {
@@ -26,6 +42,7 @@ export function createSlidingWindowLimiter({
   let queue: Promise<void> = Promise.resolve();
 
   async function acquireNow(units: number): Promise<void> {
+    const startedAt = now();
     for (;;) {
       const current = now();
       while (entries.length > 0 && entries[0]!.at <= current - windowMs) entries.shift();
@@ -42,6 +59,7 @@ export function createSlidingWindowLimiter({
         waitUntil = entry.at + windowMs;
         if (freed >= units) break;
       }
+      if (waitUntil - startedAt > maxWaitMs) throw new RateLimitExceededError(waitUntil - current);
       await sleep(Math.max(1, waitUntil - current));
     }
   }
