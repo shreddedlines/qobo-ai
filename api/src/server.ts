@@ -1,11 +1,14 @@
 import { createApp } from './app.ts';
 import { createSupabaseTokenVerifier } from './auth/token-verifier.ts';
+import { createSupabaseExchangeStore } from './chat/exchange-store.ts';
+import { createSupabaseUserMessageQuota } from './chat/user-quota.ts';
 import { EnvValidationError, loadEnv, type Env } from './config/env.ts';
 import { createSupabaseConversationStore } from './conversations/store.ts';
-import { createAuthClient, createServiceClient } from './db/supabase.ts';
+import { createAuthClient } from './db/supabase.ts';
 import { createSupabaseHealthCheck } from './health/routes.ts';
 import { createLogger } from './lib/logger.ts';
 import { checkKnowledgeBase } from './rag/kb-compat.ts';
+import { createChatRuntime } from './rag/setup.ts';
 
 function readEnvOrExit(): Env {
   try {
@@ -23,7 +26,9 @@ async function main(): Promise<void> {
   const env = readEnvOrExit();
   const logger = createLogger(env);
 
-  const knowledgeBase = await checkKnowledgeBase(createServiceClient(env), env.GEMINI_EMBEDDING_MODEL);
+  const { chatService, service } = createChatRuntime(env);
+
+  const knowledgeBase = await checkKnowledgeBase(service, env.GEMINI_EMBEDDING_MODEL);
   if (knowledgeBase.status === 'mismatch') {
     logger.fatal({ knowledgeBase }, 'knowledge base is incompatible with the configured embedding model');
     process.exit(1);
@@ -37,11 +42,17 @@ async function main(): Promise<void> {
     tokenVerifier: createSupabaseTokenVerifier(createAuthClient(env).auth),
     conversationStore: createSupabaseConversationStore(env),
     healthCheck: createSupabaseHealthCheck(env),
+    chatService,
+    exchangeStore: createSupabaseExchangeStore(service),
+    userQuota: createSupabaseUserMessageQuota(service, env.USER_DAILY_MESSAGE_CAP),
   });
 
   const server = app.listen(env.PORT, () => {
     logger.info({ port: env.PORT }, 'api listening');
   });
+  // A chat turn is bounded by CHAT_REQUEST_TIMEOUT_MS; nothing legitimate needs longer.
+  server.requestTimeout = env.CHAT_REQUEST_TIMEOUT_MS + 15_000;
+  server.headersTimeout = 20_000;
 
   const shutdown = (signal: string) => {
     logger.info({ signal }, 'shutting down');

@@ -15,7 +15,7 @@
     "lint": "eslint .",
     "test": "node --test \"test/**/*.test.ts\"",
     "test:watch": "node --test --watch \"test/**/*.test.ts\"",
-    "test:hosted": "node --env-file-if-exists=.env.test --test \"test-hosted/**/*.test.ts\"",
+    "test:hosted": "node --env-file-if-exists=.env --env-file-if-exists=.env.test --test \"test-hosted/**/*.test.ts\"",
     "ingest:crawl": "node scripts/ingest/crawl.ts",
     "ingest:build": "node --env-file-if-exists=.env scripts/ingest/build-kb.ts",
     "ingest:verify": "node --env-file-if-exists=.env scripts/ingest/verify-kb.ts",

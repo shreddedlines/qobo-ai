@@ -3,6 +3,10 @@ import helmet from 'helmet';
 
 import { requireAuth } from './auth/require-auth.ts';
 import type { TokenVerifier } from './auth/token-verifier.ts';
+import type { ChatService } from './chat/chat-service.ts';
+import type { ExchangeStore } from './chat/exchange-store.ts';
+import { createChatRouter } from './chat/routes.ts';
+import type { UserMessageQuota } from './chat/user-quota.ts';
 import type { Env } from './config/env.ts';
 import { createConversationRouter } from './conversations/routes.ts';
 import type { ConversationStore } from './conversations/store.ts';
@@ -17,6 +21,9 @@ export interface AppDeps {
   tokenVerifier: TokenVerifier;
   conversationStore: ConversationStore;
   healthCheck: HealthCheck;
+  chatService: ChatService;
+  exchangeStore: ExchangeStore;
+  userQuota: UserMessageQuota;
 }
 
 export function createApp(deps: AppDeps): Express {
@@ -38,6 +45,21 @@ export function createApp(deps: AppDeps): Express {
   app.use('/api', perIpRateLimit(env.API_RATE_LIMIT_PER_MINUTE, 'Too many requests. Please slow down.'));
 
   app.use('/api/conversations', requireAuth(deps.tokenVerifier), createConversationRouter(deps.conversationStore));
+
+  // Chat turns call paid models: a stricter per-IP limit on top of the API limit and the per-user daily cap.
+  app.use(
+    '/api/chat',
+    perIpRateLimit(env.CHAT_RATE_LIMIT_PER_MINUTE, 'Too many messages. Please wait a moment before sending another.'),
+    requireAuth(deps.tokenVerifier),
+    createChatRouter({
+      chatService: deps.chatService,
+      exchanges: deps.exchangeStore,
+      conversations: deps.conversationStore,
+      quota: deps.userQuota,
+      timeoutMs: env.CHAT_REQUEST_TIMEOUT_MS,
+      logger,
+    }),
+  );
 
   app.use(notFoundHandler);
   app.use(createErrorHandler(logger));

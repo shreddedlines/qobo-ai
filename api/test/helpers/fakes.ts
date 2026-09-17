@@ -5,6 +5,9 @@ import { pino } from 'pino';
 
 import { createApp, type AppDeps } from '../../src/app.ts';
 import { AuthUnavailableError, type AuthUser, type TokenVerifier } from '../../src/auth/token-verifier.ts';
+import type { ChatReply, ChatRequest, ChatService } from '../../src/chat/chat-service.ts';
+import { ConversationNotFoundError, type AppendExchangeInput, type ExchangeStore, type StoredExchange } from '../../src/chat/exchange-store.ts';
+import type { QuotaResult, UserMessageQuota } from '../../src/chat/user-quota.ts';
 import type { ConversationStore, ConversationWithMessages, ListConversationsOptions } from '../../src/conversations/store.ts';
 import type { ChatMessage, ConversationSummary } from '../../src/conversations/types.ts';
 import type { HealthCheck } from '../../src/health/routes.ts';
@@ -29,7 +32,7 @@ export class FakeTokenVerifier implements TokenVerifier {
 
 interface StoredConversation extends ConversationSummary {
   userId: string;
-  messages: ChatMessage[];
+  messages: Array<ChatMessage & { clientMessageId?: string }>;
 }
 
 /** Mirrors the ownership rules RLS enforces in the real database. */
@@ -48,6 +51,7 @@ export class InMemoryConversationStore implements ConversationStore {
         role: i % 2 === 0 ? 'user' : 'assistant',
         content: `message ${i}`,
         intent: i % 2 === 0 ? null : 'qobo',
+        status: i % 2 === 0 ? null : 'answered',
         sources: [],
         createdAt: updatedAt,
       })),
@@ -68,7 +72,7 @@ export class InMemoryConversationStore implements ConversationStore {
     const found = this.conversations.find((c) => c.id === conversationId && c.userId === user.id);
     if (!found) return null;
     const { id, title, createdAt, updatedAt, messages } = found;
-    return { conversation: { id, title, createdAt, updatedAt }, messages };
+    return { conversation: { id, title, createdAt, updatedAt }, messages: messages.map(({ clientMessageId: _ignored, ...message }) => message) };
   }
 
   async delete(user: AuthUser, conversationId: string): Promise<boolean> {
@@ -76,6 +80,93 @@ export class InMemoryConversationStore implements ConversationStore {
     if (index === -1) return false;
     this.conversations.splice(index, 1);
     return true;
+  }
+}
+
+/** In-memory append_exchange/get_exchange with the same ownership and idempotency rules. */
+export class InMemoryExchangeStore implements ExchangeStore {
+  readonly appended: AppendExchangeInput[] = [];
+  failWith: Error | undefined;
+  private readonly store: InMemoryConversationStore;
+
+  constructor(store: InMemoryConversationStore) {
+    this.store = store;
+  }
+
+  async findByClientMessageId(userId: string, clientMessageId: string): Promise<StoredExchange | null> {
+    for (const conversation of this.store.conversations.filter((c) => c.userId === userId)) {
+      const index = conversation.messages.findIndex((m) => m.clientMessageId === clientMessageId);
+      if (index !== -1) return this.exchange(conversation, index, true);
+    }
+    return null;
+  }
+
+  async append(input: AppendExchangeInput): Promise<StoredExchange> {
+    if (this.failWith) throw this.failWith;
+    const existing = await this.findByClientMessageId(input.userId, input.clientMessageId);
+    if (existing) return existing;
+
+    const now = new Date().toISOString();
+    let conversation = input.conversationId ? this.store.conversations.find((c) => c.id === input.conversationId && c.userId === input.userId) : undefined;
+    if (input.conversationId && !conversation) throw new ConversationNotFoundError();
+    if (!conversation) {
+      conversation = { id: randomUUID(), userId: input.userId, title: input.title, createdAt: now, updatedAt: now, messages: [] };
+      this.store.conversations.push(conversation);
+    }
+    conversation.updatedAt = now;
+    conversation.messages.push(
+      { id: randomUUID(), role: 'user', content: input.userContent, intent: null, status: null, sources: [], createdAt: now, clientMessageId: input.clientMessageId },
+      { id: randomUUID(), role: 'assistant', content: input.assistantContent, intent: input.intent, status: (input.metadata.status as ChatMessage['status']) ?? null, sources: input.sources, createdAt: now },
+    );
+    this.appended.push(input);
+    return this.exchange(conversation, conversation.messages.length - 2, false);
+  }
+
+  private exchange(conversation: StoredConversation, userIndex: number, replayed: boolean): StoredExchange {
+    const strip = ({ clientMessageId: _ignored, ...message }: ChatMessage & { clientMessageId?: string }): ChatMessage => message;
+    const { id, title, createdAt, updatedAt } = conversation;
+    return {
+      conversation: { id, title, createdAt, updatedAt },
+      userMessage: strip(conversation.messages[userIndex]!),
+      assistantMessage: strip(conversation.messages[userIndex + 1]!),
+      replayed,
+    };
+  }
+}
+
+export class FakeChatService implements ChatService {
+  readonly requests: ChatRequest[] = [];
+  respondWith: ChatReply | Error | 'hang' = {
+    intent: 'qobo',
+    status: 'answered',
+    content: 'QOBO builds websites through WhatsApp [1].',
+    sources: [{ title: 'QOBO Home', url: 'https://qobo.dev/', kind: 'qobo' }],
+    metadata: { router: { source: 'model', model: 'router-model', language: 'en', smalltalkType: 'other' }, latencyMs: 12 },
+  };
+
+  async respond(request: ChatRequest): Promise<ChatReply> {
+    this.requests.push(request);
+    if (this.respondWith === 'hang') return new Promise<never>(() => undefined);
+    if (this.respondWith instanceof Error) throw this.respondWith;
+    return this.respondWith;
+  }
+}
+
+export class FakeUserQuota implements UserMessageQuota {
+  readonly used = new Map<string, number>();
+  limit: number;
+  failWith: Error | undefined;
+
+  constructor(limit = 50) {
+    this.limit = limit;
+  }
+
+  async consume(userId: string): Promise<QuotaResult> {
+    if (this.failWith) throw this.failWith;
+    const used = this.used.get(userId) ?? 0;
+    if (used >= this.limit) return { allowed: false, used, limit: this.limit };
+    this.used.set(userId, used + 1);
+    return { allowed: true, used: used + 1, limit: this.limit };
   }
 }
 
@@ -90,12 +181,18 @@ export interface TestApp {
   app: Express;
   verifier: FakeTokenVerifier;
   store: InMemoryConversationStore;
+  exchanges: InMemoryExchangeStore;
+  chat: FakeChatService;
+  quota: FakeUserQuota;
   health: FakeHealthCheck;
 }
 
 export function buildTestApp(envOverrides: Record<string, string> = {}, depOverrides: Partial<AppDeps> = {}): TestApp {
   const verifier = new FakeTokenVerifier();
   const store = new InMemoryConversationStore();
+  const exchanges = new InMemoryExchangeStore(store);
+  const chat = new FakeChatService();
+  const quota = new FakeUserQuota();
   const health = new FakeHealthCheck();
   const app = createApp({
     env: testEnv(envOverrides),
@@ -103,7 +200,10 @@ export function buildTestApp(envOverrides: Record<string, string> = {}, depOverr
     tokenVerifier: verifier,
     conversationStore: store,
     healthCheck: health,
+    chatService: chat,
+    exchangeStore: exchanges,
+    userQuota: quota,
     ...depOverrides,
   });
-  return { app, verifier, store, health };
+  return { app, verifier, store, exchanges, chat, quota, health };
 }

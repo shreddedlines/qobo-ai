@@ -11,6 +11,8 @@ export type ErrorCode =
   | 'quota_exceeded'
   | 'upstream_error'
   | 'service_unavailable'
+  | 'timeout'
+  | 'conflict'
   | 'internal_error';
 
 export class HttpError extends Error {

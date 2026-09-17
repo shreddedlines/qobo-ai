@@ -1,7 +1,7 @@
 import type { AuthUser } from '../auth/token-verifier.ts';
 import type { Env } from '../config/env.ts';
 import { createUserClient, DatabaseError } from '../db/supabase.ts';
-import type { ChatMessage, ConversationSummary, Intent, Source } from './types.ts';
+import type { ChatMessage, ConversationSummary, Intent, MessageStatus, Source } from './types.ts';
 
 export const MAX_MESSAGES_PER_CONVERSATION_READ = 500;
 
@@ -23,18 +23,19 @@ export interface ConversationStore {
   delete(user: AuthUser, conversationId: string): Promise<boolean>;
 }
 
-interface ConversationRow {
+export interface ConversationRow {
   id: string;
   title: string;
   created_at: string;
   updated_at: string;
 }
 
-interface MessageRow {
+export interface MessageRow {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   intent: Intent | null;
+  status: MessageStatus | null;
   sources: Source[];
   created_at: string;
 }
@@ -74,7 +75,7 @@ export function createSupabaseConversationStore(env: Env): ConversationStore {
 
       const messages = await client
         .from('messages')
-        .select('id, role, content, intent, sources, created_at')
+        .select('id, role, content, intent, status:metadata->>status, sources, created_at')
         .eq('conversation_id', conversationId)
         .order('seq', { ascending: true })
         .limit(MAX_MESSAGES_PER_CONVERSATION_READ)
@@ -107,6 +108,7 @@ export function toChatMessage(row: MessageRow): ChatMessage {
     role: row.role,
     content: row.content,
     intent: row.intent,
+    status: row.status ?? null,
     sources: Array.isArray(row.sources) ? row.sources : [],
     createdAt: row.created_at,
   };

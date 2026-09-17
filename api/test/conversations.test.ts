@@ -94,7 +94,7 @@ describe('GET /api/conversations/:id/messages', () => {
     assert.equal(res.status, 200);
     assert.equal(res.body.conversation.id, conversation.id);
     assert.equal(res.body.messages.length, 4);
-    assert.deepEqual(Object.keys(res.body.messages[0]).sort(), ['content', 'createdAt', 'id', 'intent', 'role', 'sources']);
+    assert.deepEqual(Object.keys(res.body.messages[0]).sort(), ['content', 'createdAt', 'id', 'intent', 'role', 'sources', 'status']);
   });
 
   it("returns 404 for another user's conversation, a missing id, or a malformed id", async () => {

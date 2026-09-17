@@ -42,7 +42,7 @@ message ─► intent router (gemini-3.5-flash-lite, schema-bound JSON)
 
 ## QOBO answers (M4)
 
-The QOBO answer path turns a question into a grounded, cited answer, or a fixed "not found" reply. It never guesses. The chat endpoint (M6) will expose the pipeline over HTTP; until then, use the developer commands below.
+The QOBO answer path turns a question into a grounded, cited answer, or a fixed "not found" reply. It never guesses. `POST /api/chat` (M6) exposes the pipeline over HTTP with saved conversations; see [api.md](api.md). The developer commands below run it directly.
 
 ```
 question ─► retrieve (embed query → match_kb_chunks, top 6, similarity ≥ 0.60)

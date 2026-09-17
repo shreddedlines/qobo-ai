@@ -12,7 +12,7 @@ An AI support assistant for [QOBO](https://qobo.dev/) that answers questions gro
 | `supabase/migrations/` | Postgres schema, grants, Row Level Security, SQL functions |
 | `kb/` | Knowledge-base crawl config, reviewed page snapshots of qobo.dev |
 | `eval/` | Evaluation questions and generated result reports |
-| `docs/` | Guides: [Supabase setup](docs/supabase-setup.md), [knowledge base](docs/knowledge-base.md), [chat and answer pipeline](docs/answer-pipeline.md) |
+| `docs/` | Guides: [Supabase setup](docs/supabase-setup.md), [knowledge base](docs/knowledge-base.md), [chat and answer pipeline](docs/answer-pipeline.md), [HTTP API](docs/api.md) |
 | `web/` | React + Vite frontend (not started) |
 
 ## Stack

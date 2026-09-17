@@ -44,6 +44,8 @@ const envSchema = z
     // Per-IP request limits (fixed one-minute windows).
     API_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(120),
     CHAT_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(20),
+    // Upper bound for one chat turn (routing + retrieval/search + generation).
+    CHAT_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(45_000),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && env.CORS_ORIGINS.length === 0) {
