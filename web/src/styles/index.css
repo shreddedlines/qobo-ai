@@ -1,0 +1,83 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+/* Expose the tokens as Tailwind utilities (bg-surface, text-ink, border-line, …). */
+@theme inline {
+  --color-surface: var(--surface);
+  --color-sunken: var(--surface-sunken);
+  --color-raised: var(--surface-raised);
+  --color-ink: var(--ink);
+  --color-muted: var(--ink-muted);
+  --color-line: var(--line);
+
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-tint: var(--brand-tint);
+  --color-brand-ink: var(--brand-ink);
+  --color-on-brand: var(--on-brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-strong-hover: var(--brand-strong-hover);
+  --color-on-brand-strong: var(--on-brand-strong);
+
+  --color-support: var(--support);
+  --color-support-tint: var(--support-tint);
+  --color-support-ink: var(--support-ink);
+
+  --color-danger: var(--danger);
+  --color-danger-tint: var(--danger-tint);
+  --color-danger-ink: var(--danger-ink);
+  --color-overlay: var(--overlay);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+
+  --shadow-soft: var(--shadow-soft);
+
+  /* Inter carries the interface; Poppins is restricted to the wordmark and one headline. */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Poppins', 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    /* Room for the sticky header and composer, so scrolling a focused control into
+       view never parks it underneath them. */
+    scroll-padding-top: 4.5rem;
+    scroll-padding-bottom: 10rem;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--surface-sunken);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Keyboard focus stays visible everywhere and is never removed. */
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /* Answers and long prose stay under ~68 characters per line. */
+  .measure {
+    max-width: 34rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

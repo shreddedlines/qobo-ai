@@ -2,7 +2,9 @@
 
 An AI support assistant for [QOBO](https://qobo.dev/) that answers questions grounded in QOBO's own website, redirects unrelated requests, and uses cited web research for general questions about websites and digital business.
 
-> **Status:** backend in progress (backend-first MVP). The React frontend is a later, separate milestone.
+> **Status:** the API is deployed at <https://qobo-support-api.onrender.com> (health: `/api/health`).
+> The React frontend is complete and production-built; deploying it to Vercel needs account
+> access, so its public URL is not live yet. See [deployment](docs/deployment.md).
 
 ## Repository layout
 
@@ -14,7 +16,7 @@ An AI support assistant for [QOBO](https://qobo.dev/) that answers questions gro
 | `eval/` | Evaluation questions and generated result reports |
 | `docs/` | Guides: [Supabase setup](docs/supabase-setup.md), [knowledge base](docs/knowledge-base.md), [chat and answer pipeline](docs/answer-pipeline.md), [HTTP API](docs/api.md), [deployment](docs/deployment.md) |
 | `render.yaml`, `.github/workflows/` | Render blueprint, CI checks and the keep-alive ping |
-| `web/` | React + Vite frontend (not started) |
+| `web/` | React 19 + Vite frontend: Supabase auth, chat with citations, conversation history, light/dark themes |
 
 ## Stack
 
@@ -22,7 +24,8 @@ An AI support assistant for [QOBO](https://qobo.dev/) that answers questions gro
 - **Database/Auth:** Supabase Auth, Postgres, pgvector
 - **AI:** Gemini (routing, answers, `gemini-embedding-2` embeddings), Tavily (web research)
 - **Ingestion:** Playwright (qobo.dev is a client-rendered SPA)
-- **Hosting:** Render (API), Vercel (frontend, later)
+- **Frontend:** React 19, Vite, TypeScript, Tailwind 4, react-router; no UI framework and no Markdown dependency (replies are parsed to React elements, so no HTML from the model is ever inserted)
+- **Hosting:** Render (API, live), Vercel (frontend, configured in `web/vercel.json`)
 - **Tests:** Node's built-in test runner (`node:test`) + supertest
 
 ## Backend quick start
@@ -50,3 +53,46 @@ npm run dev            # http://localhost:8080/api/health
 | `npm run ingest:build:prod` / `ingest:verify:prod` | Builds and verifies the knowledge base in the production project |
 
 Environment variables are documented in [`api/.env.example`](api/.env.example) and validated at startup; the server refuses to start with missing or malformed configuration.
+
+## Frontend quick start
+
+```bash
+cd web
+npm install
+cp .env.example .env.local   # fill in real values
+npm run dev                  # http://localhost:5173
+```
+
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Vite dev server on port 5173 (the API's `CORS_ORIGINS` must include `http://localhost:5173`) |
+| `npm test` | Unit tests for validation, auth error mapping, route guards, Markdown and citation parsing, chat state, history grouping and themes |
+| `npm run typecheck` / `npm run lint` | Static checks (TypeScript project references; ESLint with the React Compiler rules) |
+| `npm run build` | Type-checks, builds to `dist/`, then scans the bundle for server secrets and fails if it finds any |
+| `npm run preview` | Serves the production build locally on port 5173 |
+| `npm run verify:bundle` | Re-runs the secret scan against an existing `dist/` |
+| `npm run smoke -- <url>` | Smoke-tests a deployed frontend: single-page rewrite, caching, bundle/API wiring, security headers, CORS, no leaked secrets |
+
+Three variables are required at **build** time, because Vite inlines them (see [`web/.env.example`](web/.env.example)):
+
+| Variable | Value |
+| --- | --- |
+| `VITE_API_BASE_URL` | `https://qobo-support-api.onrender.com` |
+| `VITE_SUPABASE_URL` | The Supabase project URL for the environment being built |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | The project's **publishable** key (`sb_publishable_…`) |
+
+Only these three reach the browser. The app refuses to start if `VITE_SUPABASE_PUBLISHABLE_KEY` holds a secret key (`sb_secret_…`), and `npm run build` fails if any server secret ends up in the bundle. Every AI, search and service-role credential stays on the API.
+
+## Deployed architecture
+
+```
+Browser ──► Vercel (static React build, web/)
+               │  fetch with the user's Supabase access token
+               ▼
+          Render (Express API, api/)  ──► Supabase Postgres + pgvector (RLS)
+               │                      └─► Supabase Auth (JWT verified via signing keys)
+               ├─► Gemini  (routing, answers, embeddings)
+               └─► Tavily  (web research for general questions)
+```
+
+The browser never talks to Gemini, Tavily or Postgres, and never holds anything but the publishable key and the signed-in user's own token.

@@ -1,7 +1,7 @@
-# Deployment (M7)
+# Deployment
 
 ```
-Browser ──► (frontend, M9: Vercel) ──► Render web service "qobo-support-api"
+Browser ──► Vercel (static React build from web/) ──► Render web service "qobo-support-api"
                                           │  Express 5 on Node 24, free plan, Singapore
                                           ▼
                               Supabase "qobo-prod" (South Asia / Mumbai)
@@ -88,10 +88,60 @@ Copy `api/.env.smoke.example` to `api/.env.smoke` (git-ignored) and fill in the 
 
 ```bash
 cd api
-npm run smoke -- https://<service>.onrender.com --origin=https://qobo-chat.vercel.app
+npm run smoke -- https://qobo-support-api.onrender.com --origin=https://<your-project>.vercel.app
 ```
 
 It checks health (allowing a cold start), the deep database check, security headers, 401s on `/api/conversations` and `/api/chat`, the JSON 404, the CORS allowlist, and then one real chat turn: small talk, saved conversation, retry replay and delete. It creates one throwaway user and deletes it afterwards.
+
+## 7. Deploy the frontend to Vercel
+
+The frontend is a static build: Vercel serves files, and the browser talks to the Render API directly. `web/vercel.json` already holds the routing, caching and security headers, so the only manual work is the project settings and the three build-time variables.
+
+**Project settings** (Vercel → Add New → Project → import this repository):
+
+| Setting | Value | Why |
+| --- | --- | --- |
+| Root Directory | `web` | The repository is a monorepo; the app is not at the root |
+| Framework Preset | Vite | Detected automatically |
+| Build Command | `npm run build` | Type-checks, builds, then scans the bundle for secrets |
+| Output Directory | `dist` | |
+| Node version | 24 | Matches `web/package.json` engines |
+
+**Environment variables** (Production, and Preview if you use preview deploys):
+
+| Variable | Value |
+| --- | --- |
+| `VITE_API_BASE_URL` | `https://qobo-support-api.onrender.com` |
+| `VITE_SUPABASE_URL` | The **qobo-prod** project URL |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | The **qobo-prod** publishable key (`sb_publishable_…`, Supabase → Project Settings → API keys) |
+
+Vite inlines these at build time, so changing one needs a redeploy. Never add `SUPABASE_SECRET_KEY`, `GEMINI_API_KEY`, `TAVILY_API_KEY` or `DATABASE_URL` here: they belong only to Render. `npm run build` fails if a server secret reaches the bundle, so a mistake stops the deploy instead of publishing a key.
+
+**Then point the API at the new origin.** In Render → `qobo-support-api` → Environment, set:
+
+```
+CORS_ORIGINS=https://<your-project>.vercel.app
+```
+
+One origin, no trailing slash, and no `localhost` in production — the API rejects every other origin's browser requests. Save and let Render redeploy. If you also use Vercel preview deployments, add their origins explicitly; the API does not accept wildcards.
+
+`vercel.json` explained:
+
+- **Rewrite `/(.*) → /index.html`** — the app owns its routes, so refreshing `/chat/<id>` must serve the app rather than 404. Vercel matches real files first, so hashed assets are untouched.
+- **Caching** — `/assets/*` is immutable for a year (filenames carry a content hash); `index.html` is `no-cache` so a browser never keeps pointing at assets from an older deploy.
+- **Content-Security-Policy** — `script-src 'self'` with no inline scripts (this is why the theme is applied by `public/theme-init.js` rather than an inline script), and `connect-src` limited to the Render API and Supabase. `style-src` allows inline styles because React sets element style attributes (textarea auto-grow, loading placeholders).
+- **`frame-ancestors 'none'`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, HSTS** — the app is never framed, never sniffed, and leaks no referrer to third parties.
+
+## 8. Smoke test the public frontend
+
+```bash
+cd web
+npm run smoke -- https://<your-project>.vercel.app
+```
+
+This checks the single-page rewrite on a deep link, `index.html` caching, that the bundle was built against the production API and carries only a publishable key, the security headers, that the API is awake and allows exactly this origin, and that `/api/conversations` still refuses an anonymous caller.
+
+Then, in a browser, confirm the whole path end to end: sign up or sign in, ask a QOBO question and check the citations and source links, ask something off-topic and see the redirect, open a saved conversation from the sidebar, delete one, and check the browser console is clean. Do it once at desktop width and once on a phone-sized viewport.
 
 ## Operations
 
@@ -102,7 +152,8 @@ It checks health (allowing a cold start), the deep database check, security head
 | Update content | Re-run the crawl, review the snapshot diff, then `npm run ingest:build:prod`. The knowledge base is replaced in one transaction, so the API keeps serving the old one until it succeeds. |
 | Rotate a key | Change it in Render's environment and redeploy. Rotate Supabase keys in the dashboard; update both Render and your local `.env` files. |
 | Change caps | `USER_DAILY_MESSAGE_CAP`, `WEB_SEARCH_DAILY_CAP`, `API_RATE_LIMIT_PER_MINUTE`, `CHAT_RATE_LIMIT_PER_MINUTE` in Render. |
-| Frontend goes live (M9) | Set `CORS_ORIGINS` to the deployed frontend origin and redeploy. |
+| Frontend deploys | Vercel auto-deploys on push to the default branch (Root Directory `web`). Roll back from Vercel → Deployments. |
+| Frontend origin changes | Update `CORS_ORIGINS` in Render to the new origin and redeploy the API, or browser requests start failing CORS. |
 
 ### Free-tier limits worth remembering
 

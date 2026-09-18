@@ -1,0 +1,122 @@
+/*
+ * QOBO Support — design tokens.
+ *
+ * Palette taken from qobo.dev itself: orange #FF7A2F, teal #46C6B9, near-black #1A1A1B.
+ * Contrast discipline: #FF7A2F on white is ~2.5:1, so the brand orange is never used for
+ * body text on light surfaces. It fills and tints; text on those tints uses --brand-ink.
+ * Teal is reserved for one job only: marking web-research sources, so colour carries meaning.
+ */
+:root {
+  color-scheme: light;
+
+  /* Surfaces */
+  --surface: #ffffff;
+  --surface-sunken: #f6f6f4;
+  --surface-raised: #ffffff;
+
+  /* Text */
+  --ink: #1a1a1b;
+  --ink-muted: #5c5c5e;
+  --line: #e6e4e0;
+
+  /* Brand: QOBO orange — accents, tints, citation markers */
+  --brand: #ff7a2f;
+  --brand-hover: #ea580c;
+  /* Filled buttons: white on #ff7a2f is 2.6:1, so the fill darkens to clear AA (6.1:1) */
+  --brand-strong: #b03a00;
+  --brand-strong-hover: #8f2f00;
+  --on-brand-strong: #ffffff;
+  --brand-tint: #fff1e8;
+  --brand-ink: #7a2e00;
+  --on-brand: #ffffff;
+
+  /* Support: QOBO teal — web-research sources only */
+  --support: #46c6b9;
+  --support-tint: #e6f7f5;
+  --support-ink: #0f5f57;
+
+  /* Status */
+  --danger: #b42318;
+  --danger-tint: #fef3f2;
+  --danger-ink: #912018;
+  --focus: #1a1a1b;
+  /* Modal backdrop. Always a dark veil, never derived from the ink token. */
+  --overlay: rgb(26 26 27 / 0.45);
+
+  /* Shape and depth (one soft shadow, used sparingly) */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --shadow-soft: 0 1px 2px rgb(26 26 27 / 0.06), 0 8px 24px rgb(26 26 27 / 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --surface: #171717;
+    --surface-sunken: #101010;
+    --surface-raised: #1f1f1f;
+
+    --ink: #f4f3f1;
+    --ink-muted: #a8a6a2;
+    --line: #2c2c2a;
+
+    /* On dark surfaces the orange clears 4.5:1, so it may carry text */
+    --brand: #ff8f4d;
+    --brand-hover: #ffa269;
+    --brand-tint: #2a1508;
+    --brand-ink: #ffd2b4;
+    --on-brand: #1a1a1b;
+    /* On dark surfaces the brand orange carries dark text at 7.6:1 */
+    --brand-strong: #ff8f4d;
+    --brand-strong-hover: #ffa269;
+    --on-brand-strong: #1a1a1b;
+
+    --support: #5fd6c9;
+    --support-tint: #0c2926;
+    --support-ink: #a6ece3;
+
+    --danger: #f97066;
+    --danger-tint: #2d1210;
+    --danger-ink: #fda29b;
+    --focus: #f4f3f1;
+    --overlay: rgb(0 0 0 / 0.65);
+
+    --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.35);
+  }
+}
+
+/* Manual override, for the theme toggle added with the chat UI */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --surface: #171717;
+  --surface-sunken: #101010;
+  --surface-raised: #1f1f1f;
+
+  --ink: #f4f3f1;
+  --ink-muted: #a8a6a2;
+  --line: #2c2c2a;
+
+  --brand: #ff8f4d;
+  --brand-hover: #ffa269;
+  --brand-tint: #2a1508;
+  --brand-ink: #ffd2b4;
+  --on-brand: #1a1a1b;
+  --brand-strong: #ff8f4d;
+  --brand-strong-hover: #ffa269;
+  --on-brand-strong: #1a1a1b;
+
+  --support: #5fd6c9;
+  --support-tint: #0c2926;
+  --support-ink: #a6ece3;
+
+  --danger: #f97066;
+  --danger-tint: #2d1210;
+  --danger-ink: #fda29b;
+  --focus: #f4f3f1;
+  --overlay: rgb(0 0 0 / 0.65);
+
+  --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.35);
+}
