@@ -42,6 +42,29 @@ export function buildContextSources(chunks: RetrievedChunk[], discrepancies: Dis
   return sources;
 }
 
+/**
+ * A bracket that looks like a citation the model made up: a label where a source
+ * number belongs.
+ *
+ * Only source ids are citable, and by the time this runs every real one has already
+ * become "[n]". What is left is either an id the model invented or, as seen in
+ * production, a name it copied from the prompt's own structure — "[Known
+ * Discrepancies]" from the <known_discrepancies> section. Matching the shape rather
+ * than a list of known labels is what makes it hold for labels nobody predicted.
+ *
+ * Deliberately narrow:
+ *   * a numeric bracket is left alone, so "[1]" and "[1, 2]" survive
+ *   * a bracket followed by "(" is a Markdown link, so "[our plans](https://…)" survives
+ *   * the label must read like a label: starts with a letter, no punctuation beyond
+ *     " . _ - '", and at most 40 characters, so ordinary prose in brackets is untouched
+ */
+const INVENTED_CITATION = /\[\s*(?!\d[\d\s,]*\])[A-Za-z][A-Za-z0-9 ._'-]{0,39}\s*\](?!\()/g;
+
+/** Removes bracketed labels that pretend to be citations. */
+export function stripInventedCitations(text: string): string {
+  return text.replace(INVENTED_CITATION, '');
+}
+
 export interface ResolvedCitations {
   /** Answer text with [S#] markers rewritten to [n], numbered by cited page. */
   content: string;
@@ -105,10 +128,13 @@ export function resolveCitationSegments(segments: string[], declaredIds: string[
       return numbers.map((number) => `[${number}]`).join('');
     });
 
-    // Models occasionally cite internal labels (e.g. a discrepancy id) as if they were sources.
+    // Models occasionally cite internal labels (e.g. a discrepancy id) as if they were
+    // sources. The configured ids go first, then anything else label-shaped, which
+    // covers labels the model invents from the prompt's own section names.
     for (const id of nonCitableIds) {
       content = content.replaceAll(`[${id}]`, '');
     }
+    content = stripInventedCitations(content);
 
     segmentSources.push([...cited].sort((a, b) => a - b).map((number) => sources[number - 1]!));
     return content

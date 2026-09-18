@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import { applyDiscrepancyGuards, applyStatisticAttributionGuard, STATISTICS_NOTE } from '../../src/rag/answer-guards.ts';
 import { DISCREPANCIES, findRelevantDiscrepancies } from '../../src/rag/discrepancies.ts';
 import { buildAnswerPrompt, escapePromptText } from '../../src/rag/prompts.ts';
-import { buildContextSources, resolveCitations } from '../../src/rag/sources.ts';
+import { buildContextSources, resolveCitations, stripInventedCitations } from '../../src/rag/sources.ts';
 import { HOME_FAQ_CHUNK_TEXT, kbChunk, PLANS_CHUNK_TEXT } from '../helpers/rag-fakes.ts';
 
 const billing = DISCREPANCIES.find((d) => d.id === 'starter-plan-billing')!;
@@ -142,5 +142,102 @@ describe('statistics attribution guard', () => {
 describe('plans chunk fixture', () => {
   it('matches the one-time statement used by the discrepancy', () => {
     assert.ok(PLANS_CHUNK_TEXT.includes(billing.statements[0]!.quote));
+  });
+});
+
+describe('invented citations never reach the reader', () => {
+  const leakChunks = [
+    kbChunk('https://qobo.dev/plans', 'Starter ₹499', { title: 'Plans & Pricing' }),
+    kbChunk('https://qobo.dev/', 'FAQ', { title: 'QOBO Home' }),
+  ];
+  const leakSources = buildContextSources(leakChunks, []);
+  const nonCitable = DISCREPANCIES.map((d) => d.id);
+  const resolve = (answer: string, declared: string[] = ['S1']) => resolveCitations(answer, declared, leakSources, nonCitable).content;
+
+  it('removes the [Known Discrepancies] label seen in a production answer', () => {
+    // The shape of the real leak: the model cited the prompt's own section name.
+    const leaked =
+      'We offer several plans to help you launch and grow your business: a Starter plan starting at ₹499 [S1]. ' +
+      'The website describes the billing terms differently across pages, so we recommend confirming the current ' +
+      'billing terms with our team [Known Discrepancies]. For SEO, our Pro plan includes advanced SEO [S1].';
+
+    const content = resolve(leaked);
+
+    assert.ok(!content.includes('[Known Discrepancies]'), content);
+    assert.ok(!/known.discrepanc/i.test(content), 'no trace of the label in any casing');
+    assert.match(content, /confirming the current billing terms with our team\. For SEO/, 'the sentence closes up cleanly');
+    assert.match(content, /Starter plan starting at ₹499 \[1\]/, 'the real citation survives');
+    assert.match(content, /advanced SEO \[1\]/);
+  });
+
+  it('removes the label however the model writes it', () => {
+    for (const label of [
+      '[Known Discrepancies]',
+      '[known_discrepancies]',
+      '[Known Discrepancy]',
+      '[ Known Discrepancies ]',
+      '[KNOWN DISCREPANCIES]',
+      '[discrepancy]',
+      '[Sources]',
+      '[known discrepancies note]',
+    ]) {
+      assert.equal(resolve(`Confirm the billing terms with our team ${label}.`), 'Confirm the billing terms with our team.', label);
+    }
+  });
+
+  it('still removes a configured discrepancy id, as before', () => {
+    assert.equal(resolve('Starter is ₹499 [starter-plan-billing].'), 'Starter is ₹499.');
+    assert.equal(resolve('Over 1,000 websites [websites-created-count].'), 'Over 1,000 websites.');
+  });
+
+  it('removes a source id the model invented', () => {
+    assert.equal(resolve('Plans start at ₹499 [S9].'), 'Plans start at ₹499.');
+    assert.equal(resolve('Plans start at ₹499 [Source 4].'), 'Plans start at ₹499.');
+  });
+
+  it('keeps real citations, including grouped ones', () => {
+    assert.equal(resolve('Starter is ₹499 [S1] and the FAQ agrees [S2].', ['S1', 'S2']), 'Starter is ₹499 [1] and the FAQ agrees [2].');
+    assert.equal(resolve('Both pages agree [S1, S2].', ['S1', 'S2']), 'Both pages agree [1][2].');
+  });
+
+  it('leaves ordinary prose and numbers alone', () => {
+    const prose =
+      'Plans start at ₹499 per month. We build over WhatsApp — no code, no calls! ' +
+      'Ratings of 4.9/5 and 98% uptime are marketing statements. Contact us at +91 99016 31188 (9am-6pm).';
+    assert.equal(resolve(prose, []), prose);
+  });
+
+  it('leaves a Markdown link intact', () => {
+    assert.equal(resolve('See [our plans](https://qobo.dev/plans) for details [S1].'), 'See [our plans](https://qobo.dev/plans) for details [1].');
+  });
+
+  it('leaves bracketed numbers that are not citations alone', () => {
+    assert.equal(resolve('The array [1, 2, 3] is unrelated.', []), 'The array [1, 2, 3] is unrelated.');
+  });
+
+  it('leaves a long bracketed aside alone rather than eating prose', () => {
+    const aside = 'Pricing [this is a long parenthetical aside that is clearly prose and not a label] applies.';
+    assert.equal(resolve(aside, []), aside);
+  });
+
+  it('holds for the pricing answer the discrepancy guard builds on', () => {
+    const answer = 'Starter is listed at ₹499 [S1]. The pages disagree on billing [Known Discrepancies], so please confirm with our team.';
+    const cited = resolveCitations(answer, ['S1'], buildContextSources(leakChunks, [billing]), nonCitable);
+    const guarded = applyDiscrepancyGuards(cited.content, [billing]);
+
+    assert.ok(!guarded.content.includes('Known Discrepancies'), guarded.content);
+    assert.match(guarded.content, /Starter is listed at ₹499 \[1\]/, 'the price and its citation are untouched');
+    assert.match(guarded.content, /The pages disagree on billing, so please confirm with our team\./, 'the sentence reads normally');
+    assert.ok(cited.sources.length > 0, 'the source list is unaffected');
+  });
+});
+
+describe('stripInventedCitations on its own', () => {
+  it('removes a label and leaves everything else', () => {
+    assert.equal(stripInventedCitations('Confirm with our team [Known Discrepancies].'), 'Confirm with our team .');
+    assert.equal(stripInventedCitations('Starter is ₹499 [1].'), 'Starter is ₹499 [1].');
+    assert.equal(stripInventedCitations('Both agree [1][2].'), 'Both agree [1][2].');
+    assert.equal(stripInventedCitations('[our plans](https://qobo.dev/plans)'), '[our plans](https://qobo.dev/plans)');
+    assert.equal(stripInventedCitations('nothing to do here'), 'nothing to do here');
   });
 });
