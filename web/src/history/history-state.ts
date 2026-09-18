@@ -8,6 +8,9 @@ export interface HistoryState {
   /** The conversation currently being deleted, so its row can show progress. */
   deletingId: string | null;
   deleteError: unknown | null;
+  /** The conversation whose new name is being saved. */
+  renamingId: string | null;
+  renameError: unknown | null;
   /** Title of the conversation just deleted, announced once and then cleared. */
   deletedTitle: string | null;
 }
@@ -18,6 +21,9 @@ export type HistoryAction =
   | { type: 'failed'; error: unknown }
   /** A conversation was created or used; it moves to the front of the list. */
   | { type: 'upsert'; conversation: ConversationSummary }
+  | { type: 'rename/start'; id: string }
+  | { type: 'rename/succeeded'; conversation: ConversationSummary }
+  | { type: 'rename/failed'; error: unknown }
   | { type: 'delete/start'; id: string }
   | { type: 'delete/succeeded'; id: string }
   | { type: 'delete/failed'; error: unknown }
@@ -29,6 +35,8 @@ export const initialHistoryState: HistoryState = {
   error: null,
   deletingId: null,
   deleteError: null,
+  renamingId: null,
+  renameError: null,
   deletedTitle: null,
 };
 
@@ -48,6 +56,23 @@ export function historyReducer(state: HistoryState, action: HistoryAction): Hist
       return { ...state, conversations: [action.conversation, ...others], status: 'ready', error: null };
     }
 
+    case 'rename/start':
+      return { ...state, renamingId: action.id, renameError: null };
+
+    case 'rename/succeeded':
+      return {
+        ...state,
+        // Renaming is not activity, so the row keeps its place in the list.
+        conversations: state.conversations.map((conversation) =>
+          conversation.id === action.conversation.id ? { ...conversation, title: action.conversation.title } : conversation,
+        ),
+        renamingId: null,
+        renameError: null,
+      };
+
+    case 'rename/failed':
+      return { ...state, renamingId: null, renameError: action.error };
+
     case 'delete/start':
       return { ...state, deletingId: action.id, deleteError: null };
 
@@ -66,7 +91,7 @@ export function historyReducer(state: HistoryState, action: HistoryAction): Hist
       return { ...state, deletingId: null, deleteError: action.error };
 
     case 'notice/clear':
-      return { ...state, deletedTitle: null, deleteError: null };
+      return { ...state, deletedTitle: null, deleteError: null, renameError: null };
   }
 }
 

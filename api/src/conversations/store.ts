@@ -21,6 +21,12 @@ export interface ConversationStore {
   getWithMessages(user: AuthUser, conversationId: string): Promise<ConversationWithMessages | null>;
   /** Returns false when the conversation does not exist or belongs to someone else. */
   delete(user: AuthUser, conversationId: string): Promise<boolean>;
+  /**
+   * Changes the title only. Returns null when the conversation does not exist or
+   * belongs to someone else. `updated_at` is deliberately untouched: renaming is not
+   * activity, so it must not reorder the list.
+   */
+  rename(user: AuthUser, conversationId: string, title: string): Promise<ConversationSummary | null>;
 }
 
 export interface ConversationRow {
@@ -83,6 +89,18 @@ export function createSupabaseConversationStore(env: Env): ConversationStore {
       if (messages.error) throw new DatabaseError('list messages', messages.error);
 
       return { conversation: toConversationSummary(conversation.data), messages: messages.data.map(toChatMessage) };
+    },
+
+    async rename(user, conversationId, title) {
+      const { data, error } = await createUserClient(env, user.accessToken)
+        .from('conversations')
+        .update({ title })
+        .eq('id', conversationId)
+        .eq('user_id', user.id)
+        .select('id, title, created_at, updated_at')
+        .overrideTypes<ConversationRow[], { merge: false }>();
+      if (error) throw new DatabaseError('rename conversation', error);
+      return data.length > 0 ? toConversationSummary(data[0]!) : null;
     },
 
     async delete(user, conversationId) {

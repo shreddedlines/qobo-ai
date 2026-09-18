@@ -82,6 +82,15 @@ export class InMemoryConversationStore implements ConversationStore {
     return { conversation: { id, title, createdAt, updatedAt }, messages: messages.map(({ clientMessageId: _ignored, ...message }) => message) };
   }
 
+  async rename(user: AuthUser, conversationId: string, title: string): Promise<ConversationSummary | null> {
+    const found = this.conversations.find((c) => c.id === conversationId && c.userId === user.id);
+    if (!found) return null;
+    found.title = title;
+    // Renaming is not activity: updatedAt stays where it was, so the list order holds.
+    const { id, title: renamed, createdAt, updatedAt } = found;
+    return { id, title: renamed, createdAt, updatedAt };
+  }
+
   async delete(user: AuthUser, conversationId: string): Promise<boolean> {
     const index = this.conversations.findIndex((c) => c.id === conversationId && c.userId === user.id);
     if (index === -1) return false;

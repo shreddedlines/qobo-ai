@@ -5,7 +5,8 @@ import type { ConversationSummary } from '../api/types.ts';
 import { displayTitle } from '../history/conversation-groups.ts';
 import { afterDeleteTarget } from '../history/history-state.ts';
 import { HistoryProvider, useHistory } from '../history/HistoryProvider.tsx';
-import { Sidebar, SidebarContent } from '../history/Sidebar.tsx';
+import { Sidebar, SidebarContent, SIDEBAR_ID } from '../history/Sidebar.tsx';
+import { readSidebarCollapsed, sidebarToggleLabel, writeSidebarCollapsed } from '../history/sidebar-preference.ts';
 import { ConfirmDialog } from '../ui/ConfirmDialog.tsx';
 import { Drawer } from '../ui/Drawer.tsx';
 
@@ -16,6 +17,13 @@ function ChatWorkspace() {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<ConversationSummary | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readSidebarCollapsed(globalThis.localStorage));
+
+  function toggleSidebar() {
+    const collapsed = !sidebarCollapsed;
+    setSidebarCollapsed(collapsed);
+    writeSidebarCollapsed(globalThis.localStorage, collapsed);
+  }
 
   // Links inside the drawer close it themselves; this covers browser back and forward,
   // which would otherwise leave a modal drawer open over a different conversation.
@@ -53,21 +61,36 @@ function ChatWorkspace() {
       >
         Skip to the message box
       </a>
-      <Sidebar currentId={conversationId} onRequestDelete={setPendingDelete} />
+      <Sidebar currentId={conversationId} onRequestDelete={setPendingDelete} collapsed={sidebarCollapsed} />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Below desktop width the history lives in a drawer behind this control. */}
-        <div className="flex items-center gap-2 border-b border-line py-2 md:hidden">
+        {/* Below desktop width the history lives in a drawer; above it, the sidebar
+            collapses. Either way the control sits here, always visible. */}
+        <div className="flex items-center gap-2 border-b border-line py-2">
           <button
             type="button"
             onClick={() => setDrawerOpen(true)}
             aria-expanded={drawerOpen}
-            className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md px-3 text-[15px] font-medium text-ink hover:bg-sunken"
+            className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md px-3 text-[15px] font-medium text-ink hover:bg-sunken md:hidden"
           >
             <svg aria-hidden="true" viewBox="0 0 16 16" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M2.5 4h11M2.5 8h11M2.5 12h11" strokeLinecap="round" />
             </svg>
             Your chats
+          </button>
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            aria-expanded={!sidebarCollapsed}
+            aria-controls={SIDEBAR_ID}
+            className="hidden min-h-11 cursor-pointer items-center gap-2 rounded-md px-3 text-[15px] font-medium text-ink hover:bg-sunken md:flex"
+          >
+            <svg aria-hidden="true" viewBox="0 0 16 16" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <rect x="2" y="3" width="12" height="10" rx="1.5" />
+              <path d="M6.5 3v10" />
+            </svg>
+            {sidebarCollapsed ? 'Show chats' : 'Hide chats'}
+            <span className="sr-only">{sidebarToggleLabel(sidebarCollapsed)}</span>
           </button>
         </div>
 

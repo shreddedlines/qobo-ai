@@ -120,7 +120,8 @@ create policy messages_select_own on public.messages
   for select to authenticated
   using (user_id = (select auth.uid()));
 
--- No INSERT/UPDATE policies exist for authenticated, and no grants either.
+-- No INSERT policies or grants exist for authenticated. UPDATE is added later and
+-- scoped to the title column alone, for renaming (20260919120000_rename_conversation).
 -- Messages are removed only through the conversation delete cascade.
 
 -- -----------------------------------------------------------------------------

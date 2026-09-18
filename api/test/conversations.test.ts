@@ -123,3 +123,71 @@ describe('DELETE /api/conversations/:id', () => {
     assert.equal(ctx.store.conversations.length, 1);
   });
 });
+
+describe('PATCH /api/conversations/:id (rename)', () => {
+  const rename = (id: string, body: object) => asAlice(request(ctx.app).patch(`/api/conversations/${id}`)).send(body);
+
+  it('renames the conversation and returns it', async () => {
+    const conversation = ctx.store.seed(aliceId, 'Original name', '2026-09-01T10:00:00.000Z');
+
+    const res = await rename(conversation.id, { title: 'A clearer name' });
+
+    assert.equal(res.status, 200);
+    assert.equal(res.body.title, 'A clearer name');
+    assert.equal(res.body.id, conversation.id);
+    assert.equal(conversation.title, 'A clearer name', 'the store holds the new name');
+  });
+
+  it('trims the title and refuses one that is empty once trimmed', async () => {
+    const conversation = ctx.store.seed(aliceId, 'Original name', '2026-09-01T10:00:00.000Z');
+
+    const trimmed = await rename(conversation.id, { title: '  Spaced out  ' });
+    assert.equal(trimmed.body.title, 'Spaced out');
+
+    for (const title of ['', '   ', '\n\t ']) {
+      const res = await rename(conversation.id, { title });
+      assert.equal(res.status, 400, JSON.stringify(title));
+      assert.equal(res.body.error.code, 'bad_request');
+    }
+    assert.equal(conversation.title, 'Spaced out', 'a refused rename changes nothing');
+  });
+
+  it('refuses a title longer than the column allows, and a missing one', async () => {
+    const conversation = ctx.store.seed(aliceId, 'Original name', '2026-09-01T10:00:00.000Z');
+    for (const body of [{ title: 'x'.repeat(121) }, {}, { title: 42 }]) {
+      const res = await rename(conversation.id, body);
+      assert.equal(res.status, 400, JSON.stringify(body).slice(0, 30));
+    }
+    assert.equal(conversation.title, 'Original name');
+  });
+
+  it("returns 404 for someone else's conversation and for one that does not exist", async () => {
+    const foreign = ctx.store.seed(bobId, 'Private', '2026-09-01T10:00:00.000Z');
+
+    for (const id of [foreign.id, randomUUID(), 'not-a-uuid']) {
+      const res = await rename(id, { title: 'Renamed' });
+      assert.equal(res.status, 404, id);
+    }
+    assert.equal(foreign.title, 'Private', "the other person's conversation is untouched");
+  });
+
+  it('requires authentication', async () => {
+    const conversation = ctx.store.seed(aliceId, 'Original name', '2026-09-01T10:00:00.000Z');
+    const res = await request(ctx.app).patch(`/api/conversations/${conversation.id}`).send({ title: 'Renamed' });
+    assert.equal(res.status, 401);
+    assert.equal(conversation.title, 'Original name');
+  });
+
+  it('does not reorder the list: renaming is not activity', async () => {
+    const older = ctx.store.seed(aliceId, 'Older', '2026-09-01T10:00:00.000Z');
+    ctx.store.seed(aliceId, 'Newer', '2026-09-02T10:00:00.000Z');
+
+    await rename(older.id, { title: 'Older, renamed' });
+
+    const list = await asAlice(request(ctx.app).get('/api/conversations'));
+    assert.deepEqual(
+      list.body.conversations.map((conversation: { title: string }) => conversation.title),
+      ['Newer', 'Older, renamed'],
+    );
+  });
+});

@@ -2,6 +2,7 @@ import { ApiError, API_ERROR_CODES, type ApiErrorCode } from './errors.ts';
 import type {
   ConversationListResponse,
   ConversationMessagesResponse,
+  ConversationSummary,
   HealthResponse,
   SendMessageRequest,
   SendMessageResponse,
@@ -23,7 +24,7 @@ export interface RequestOptions {
 }
 
 interface RequestConfig extends RequestOptions {
-  method: 'GET' | 'POST' | 'DELETE';
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   path: string;
   body?: unknown;
   /** Health checks are public; everything else needs a token. */
@@ -35,6 +36,8 @@ export interface ApiClient {
   listConversations(params?: { limit?: number; before?: string }, options?: RequestOptions): Promise<ConversationListResponse>;
   getConversationMessages(conversationId: string, options?: RequestOptions): Promise<ConversationMessagesResponse>;
   deleteConversation(conversationId: string, options?: RequestOptions): Promise<void>;
+  /** Changes a conversation's title. Returns the conversation as it is now stored. */
+  renameConversation(conversationId: string, title: string, options?: RequestOptions): Promise<ConversationSummary>;
   sendMessage(request: SendMessageRequest, options?: RequestOptions): Promise<SendMessageResponse>;
 }
 
@@ -135,6 +138,15 @@ export function createApiClient({ baseUrl, getAccessToken, timeoutMs = DEFAULT_T
       return (await request<ConversationMessagesResponse>({
         method: 'GET',
         path: `/api/conversations/${encodeURIComponent(conversationId)}/messages`,
+        ...options,
+      }))!;
+    },
+
+    async renameConversation(conversationId, title, options = {}) {
+      return (await request<ConversationSummary>({
+        method: 'PATCH',
+        path: `/api/conversations/${encodeURIComponent(conversationId)}`,
+        body: { title },
         ...options,
       }))!;
     },

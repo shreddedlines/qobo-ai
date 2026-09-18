@@ -11,6 +11,8 @@ export interface HistoryContextValue extends HistoryState {
   noteConversation: (conversation: ConversationSummary) => void;
   /** Deletes on the API; resolves true when the conversation is gone. */
   deleteConversation: (id: string) => Promise<boolean>;
+  /** Saves a new title; resolves true when it is stored. */
+  renameConversation: (id: string, title: string) => Promise<boolean>;
   clearNotices: () => void;
 }
 
@@ -48,6 +50,18 @@ export function HistoryProvider({ children }: { children: ReactNode }) {
   const noteConversation = useCallback((conversation: ConversationSummary) => dispatch({ type: 'upsert', conversation }), []);
   const clearNotices = useCallback(() => dispatch({ type: 'notice/clear' }), []);
 
+  const renameConversation = useCallback(async (id: string, title: string) => {
+    dispatch({ type: 'rename/start', id });
+    try {
+      const conversation = await getApiClient().renameConversation(id, title);
+      dispatch({ type: 'rename/succeeded', conversation });
+      return true;
+    } catch (error) {
+      dispatch({ type: 'rename/failed', error });
+      return false;
+    }
+  }, []);
+
   const deleteConversation = useCallback(async (id: string) => {
     dispatch({ type: 'delete/start', id });
     try {
@@ -61,7 +75,7 @@ export function HistoryProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <HistoryContext.Provider value={{ ...state, reload, noteConversation, deleteConversation, clearNotices }}>
+    <HistoryContext.Provider value={{ ...state, reload, noteConversation, deleteConversation, renameConversation, clearNotices }}>
       {children}
     </HistoryContext.Provider>
   );

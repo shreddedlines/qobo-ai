@@ -79,6 +79,19 @@ describe('CORS', () => {
     assert.match(String(res.headers['access-control-allow-headers']), /Authorization/);
     assert.match(String(res.headers['access-control-allow-methods']), /DELETE/);
   });
+
+  it('allows every method the API actually routes', async () => {
+    // A route the browser cannot preflight is a route the browser cannot call: adding
+    // PATCH for renaming without this list meant the request never left the browser.
+    for (const method of ['GET', 'POST', 'PATCH', 'DELETE']) {
+      const res = await request(app)
+        .options('/api/conversations')
+        .set('Origin', 'https://chat.example.com')
+        .set('Access-Control-Request-Method', method);
+      assert.equal(res.status, 204, method);
+      assert.match(String(res.headers['access-control-allow-methods']), new RegExp(method), method);
+    }
+  });
 });
 
 describe('rate limiting', () => {

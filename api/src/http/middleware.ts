@@ -40,7 +40,7 @@ export function corsPolicy(allowedOrigins: string[]): RequestHandler {
   const allowed = new Set(allowedOrigins);
   return cors({
     origin: (origin, callback) => callback(null, origin !== undefined && allowed.has(origin)),
-    methods: ['GET', 'POST', 'DELETE'],
+    methods: ['GET', 'POST', 'PATCH', 'DELETE'],
     allowedHeaders: ['Authorization', 'Content-Type'],
     exposedHeaders: ['X-Request-Id', 'RateLimit', 'RateLimit-Policy', 'Retry-After'],
     maxAge: 600,

@@ -12,6 +12,9 @@ export interface SidebarProps {
   onNavigate?: () => void;
 }
 
+/** The id the collapse toggle points at with aria-controls. */
+export const SIDEBAR_ID = 'conversation-sidebar';
+
 function NewChatLink({ onNavigate }: { onNavigate?: (() => void) | undefined }) {
   return (
     <Link
@@ -52,12 +55,19 @@ export function SidebarContent({ currentId, onRequestDelete, onNavigate }: Sideb
   );
 }
 
-/** The always-visible sidebar from desktop width up. */
-export function Sidebar(props: SidebarProps) {
+/**
+ * The sidebar from desktop width up. Collapsing hides it and lets the conversation
+ * take the space; the element stays in the document so the toggle's aria-controls
+ * keeps pointing at something real.
+ */
+export function Sidebar({ collapsed = false, ...props }: SidebarProps & { collapsed?: boolean }) {
   return (
     <nav
+      id={SIDEBAR_ID}
       aria-label="Chat history"
-      className="sticky top-14 hidden h-[calc(100dvh-3.5rem)] w-[17rem] shrink-0 overflow-y-auto border-r border-line md:block"
+      className={`sticky top-14 h-[calc(100dvh-3.5rem)] w-[17rem] shrink-0 overflow-y-auto border-r border-line ${
+        collapsed ? 'hidden' : 'hidden md:block'
+      }`}
     >
       <SidebarContent {...props} />
     </nav>

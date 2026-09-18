@@ -162,9 +162,57 @@ describe('authenticated role', () => {
     );
   });
 
-  it('cannot update messages or conversations', async () => {
+  it('cannot update messages at all', async () => {
     await rejectsWith(t.as('authenticated', alice, (tx) => tx.query(`update public.messages set content = 'edited'`)), /permission denied/);
-    await rejectsWith(t.as('authenticated', alice, (tx) => tx.query(`update public.conversations set title = 'edited'`)), /permission denied/);
+  });
+
+  it('can rename its own conversation, and nothing else about it', async () => {
+    const renamed = await t.as('authenticated', alice, (tx) =>
+      tx.query(`update public.conversations set title = 'A better name' where id = $1 returning title`, [aliceConversation]),
+    );
+    assert.equal(renamed.rows.length, 1, 'the owner may change the title');
+
+    // The grant is scoped to one column: everything else stays out of reach.
+    await rejectsWith(
+      t.as('authenticated', alice, (tx) => tx.query(`update public.conversations set user_id = $1 where id = $2`, [bob, aliceConversation])),
+      /permission denied/,
+    );
+    for (const statement of ['set created_at = now()', 'set updated_at = now()']) {
+      await rejectsWith(
+        t.as('authenticated', alice, (tx) => tx.query(`update public.conversations ${statement} where id = $1`, [aliceConversation])),
+        /permission denied/,
+      );
+    }
+  });
+
+  it("cannot rename another user's conversation", async () => {
+    const attempt = await t.as('authenticated', bob, (tx) =>
+      tx.query(`update public.conversations set title = 'stolen' where id = $1 returning id`, [aliceConversation]),
+    );
+    assert.equal(attempt.rows.length, 0, 'the policy hides rows that are not yours');
+
+    const { rows } = await t.db.query<{ title: string }>(`select title from public.conversations where id = $1`, [aliceConversation]);
+    assert.notEqual(rows[0]?.title, 'stolen');
+  });
+
+  it('refuses an empty or over-long title at the database level', async () => {
+    for (const title of ['', 'x'.repeat(121)]) {
+      await rejectsWith(
+        t.as('authenticated', alice, (tx) => tx.query(`update public.conversations set title = $1 where id = $2`, [title, aliceConversation])),
+        /violates check constraint/,
+      );
+    }
+  });
+
+  it('does not itself reject a whitespace-only title, which is why the API trims first', async () => {
+    // char_length('   ') is 3, so the constraint passes. The rename endpoint trims and
+    // rejects the result when it is empty; this test exists so nobody assumes the
+    // database is guarding that.
+    const result = await t.as('authenticated', alice, (tx) =>
+      tx.query(`update public.conversations set title = '   ' where id = $1 returning title`, [aliceConversation]),
+    );
+    assert.equal(result.rows.length, 1);
+    await t.db.query(`update public.conversations set title = 'restored' where id = $1`, [aliceConversation]);
   });
 
   it('cannot call backend functions or reach private tables', async () => {
