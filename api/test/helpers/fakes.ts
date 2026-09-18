@@ -6,7 +6,14 @@ import { pino } from 'pino';
 import { createApp, type AppDeps } from '../../src/app.ts';
 import { AuthUnavailableError, type AuthUser, type TokenVerifier } from '../../src/auth/token-verifier.ts';
 import type { ChatReply, ChatRequest, ChatService } from '../../src/chat/chat-service.ts';
-import { ConversationNotFoundError, type AppendExchangeInput, type ExchangeStore, type StoredExchange } from '../../src/chat/exchange-store.ts';
+import {
+  ConversationNotFoundError,
+  MessageNotReplaceableError,
+  type AppendExchangeInput,
+  type ExchangeStore,
+  type ReplaceExchangeInput,
+  type StoredExchange,
+} from '../../src/chat/exchange-store.ts';
 import type { QuotaResult, UserMessageQuota } from '../../src/chat/user-quota.ts';
 import type { ConversationStore, ConversationWithMessages, ListConversationsOptions } from '../../src/conversations/store.ts';
 import type { ChatMessage, ConversationSummary } from '../../src/conversations/types.ts';
@@ -86,6 +93,7 @@ export class InMemoryConversationStore implements ConversationStore {
 /** In-memory append_exchange/get_exchange with the same ownership and idempotency rules. */
 export class InMemoryExchangeStore implements ExchangeStore {
   readonly appended: AppendExchangeInput[] = [];
+  readonly replaced: ReplaceExchangeInput[] = [];
   failWith: Error | undefined;
   private readonly store: InMemoryConversationStore;
 
@@ -120,6 +128,42 @@ export class InMemoryExchangeStore implements ExchangeStore {
     );
     this.appended.push(input);
     return this.exchange(conversation, conversation.messages.length - 2, false);
+  }
+
+  /** Mirrors replace_exchange: same position, same ids, no second copy. */
+  async replace(input: ReplaceExchangeInput): Promise<StoredExchange> {
+    if (this.failWith) throw this.failWith;
+    const existing = await this.findByClientMessageId(input.userId, input.clientMessageId);
+    if (existing) return existing;
+
+    const conversation = this.store.conversations.find((c) => c.id === input.conversationId && c.userId === input.userId);
+    if (!conversation) throw new ConversationNotFoundError();
+
+    const userIndex = conversation.messages.findIndex((m) => m.id === input.targetMessageId && m.role === 'user');
+    if (userIndex === -1) throw new MessageNotReplaceableError();
+
+    const replyIndex = conversation.messages.findIndex((m, index) => index > userIndex && m.role === 'assistant');
+    const target = conversation.messages[userIndex]!;
+    conversation.messages[userIndex] = { ...target, content: input.userContent, clientMessageId: input.clientMessageId };
+
+    const reply = replyIndex === -1 ? undefined : conversation.messages[replyIndex];
+    const replacementReply: ChatMessage & { clientMessageId?: string } = {
+      id: reply?.id ?? randomUUID(),
+      role: 'assistant',
+      content: input.assistantContent,
+      intent: input.intent,
+      status: (input.metadata.status as ChatMessage['status']) ?? null,
+      sources: input.sources,
+      createdAt: reply?.createdAt ?? new Date().toISOString(),
+    };
+    if (replyIndex === -1) conversation.messages.splice(userIndex + 1, 0, replacementReply);
+    else conversation.messages[replyIndex] = replacementReply;
+
+    // The title comes from the first message, so editing that message retitles the chat.
+    if (userIndex === 0) conversation.title = input.title;
+    conversation.updatedAt = new Date().toISOString();
+    this.replaced.push(input);
+    return this.exchange(conversation, userIndex, false);
   }
 
   private exchange(conversation: StoredConversation, userIndex: number, replayed: boolean): StoredExchange {

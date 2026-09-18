@@ -19,6 +19,8 @@ export interface SendInput {
   text: string;
   deps: SendDeps;
   signal?: AbortSignal | undefined;
+  /** Editing: replace this saved message and its reply instead of appending. */
+  replaceMessageId?: string | undefined;
 }
 
 /**
@@ -28,19 +30,25 @@ export interface SendInput {
  *
  * Returns the saved exchange, or null when the attempt did not produce one.
  */
-export async function runSend({ state, text, deps, signal }: SendInput): Promise<SendMessageResponse | null> {
+export async function runSend({ state, text, deps, signal, replaceMessageId }: SendInput): Promise<SendMessageResponse | null> {
   const message = text.trim();
   if (message === '') return null;
 
   const clientMessageId = idForAttempt(state, message, deps.newId);
-  deps.dispatch({ type: 'send/start', clientMessageId, text: message, startedAt: deps.now() });
+  deps.dispatch({
+    type: 'send/start',
+    clientMessageId,
+    text: message,
+    startedAt: deps.now(),
+    ...(replaceMessageId ? { replacesMessageId: replaceMessageId } : {}),
+  });
 
   try {
     const response = await deps.client.sendMessage(
-      { message, clientMessageId, conversationId: state.conversationId },
+      { message, clientMessageId, conversationId: state.conversationId, ...(replaceMessageId ? { replaceMessageId } : {}) },
       signal ? { signal } : {},
     );
-    deps.dispatch({ type: 'send/succeeded', response });
+    deps.dispatch({ type: 'send/succeeded', response, ...(replaceMessageId ? { replacedMessageId: replaceMessageId } : {}) });
     return response;
   } catch (error) {
     // Stop is the person's own decision, not a failure to explain away.

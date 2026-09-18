@@ -1,9 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 
 import { isApiError, toUserFacingError } from '../../api/errors.ts';
 import { Composer } from '../../chat/Composer.tsx';
-import { pendingEntry } from '../../chat/conversation-state.ts';
+import { pendingEntry, timeline } from '../../chat/conversation-state.ts';
+import { activeEdit, composerKey, startEditing, type MessageEdit } from '../../chat/editing.ts';
 import { MessageView, UserMessage } from '../../chat/MessageView.tsx';
 import { SendFailureNotice, WaitingNotice } from '../../chat/PendingNotices.tsx';
 import { useChat } from '../../chat/useChat.ts';
@@ -37,8 +38,13 @@ export function ChatPage() {
   const { state, send, retry, stop, dismissFailure, reloadHistory } = useChat(conversationId);
   const { noteConversation } = useHistory();
   const endRef = useRef<HTMLDivElement>(null);
+  const [editRequest, setEditRequest] = useState<MessageEdit | null>(null);
 
   const pending = pendingEntry(state);
+  // Derived, not stored: an edit lasts only while its message is on screen, so
+  // switching conversation or deleting one ends the edit with no extra bookkeeping.
+  const editing = activeEdit(editRequest, state.messages);
+  const entries = timeline(state);
   const arrivedReply = state.lastReplyId === null ? null : state.messages.find((message) => message.id === state.lastReplyId);
   const quotaReached = isApiError(state.failure?.error) && state.failure.error.code === 'quota_exceeded';
   const hasConversation = state.messages.length > 0 || pending !== null || state.loadingHistory;
@@ -49,7 +55,10 @@ export function ChatPage() {
   }, [state.messages.length, pending?.kind]);
 
   async function handleSend(text: string) {
-    const response = await send(text);
+    // An edit replaces the message it came from; anything else is a new message.
+    const replacing = editing?.messageId;
+    setEditRequest(null);
+    const response = await send(text, replacing ? { replaceMessageId: replacing } : {});
     if (!response) return;
 
     // Keep the sidebar in step: a new conversation appears, an existing one moves up.
@@ -113,21 +122,26 @@ export function ChatPage() {
         {state.messages.length > 0 || pending ? (
           <div className="flex flex-col gap-8 py-8">
             {state.title ? <h1 className="sr-only">{state.title}</h1> : null}
-            {state.messages.map((message) => (
-              <MessageView key={message.id} message={message} />
-            ))}
-
-            {pending ? (
-              <div className="flex flex-col gap-3">
-                <UserMessage text={pending.text} />
-                {pending.kind === 'waiting' && pending.startedAt !== undefined ? (
-                  <WaitingNotice startedAt={pending.startedAt} />
-                ) : null}
-                {state.failure ? (
-                  <SendFailureNotice failure={state.failure} onRetry={() => void retry()} onDismiss={dismissFailure} />
-                ) : null}
-              </div>
-            ) : null}
+            {entries.map((entry) =>
+              entry.kind === 'message' ? (
+                <MessageView
+                  key={entry.message.id}
+                  message={entry.message}
+                  editing={editing?.messageId === entry.message.id}
+                  onEdit={(target) => setEditRequest(startEditing(target))}
+                />
+              ) : (
+                <div key={`pending-${entry.pending.clientMessageId}`} className="flex flex-col gap-3">
+                  <UserMessage text={entry.pending.text} />
+                  {entry.pending.kind === 'waiting' && entry.pending.startedAt !== undefined ? (
+                    <WaitingNotice startedAt={entry.pending.startedAt} />
+                  ) : null}
+                  {state.failure ? (
+                    <SendFailureNotice failure={state.failure} onRetry={() => void retry()} onDismiss={dismissFailure} />
+                  ) : null}
+                </div>
+              ),
+            )}
           </div>
         ) : null}
 
@@ -145,6 +159,9 @@ export function ChatPage() {
       <div className="sticky bottom-0 border-t border-line bg-sunken py-4">
         <div className="mx-auto w-full max-w-[44rem]">
           <Composer
+            key={composerKey(editing)}
+            edit={editing}
+            onCancelEdit={() => setEditRequest(null)}
             sending={state.outgoing !== null}
             onSend={(text) => void handleSend(text)}
             onStop={stop}

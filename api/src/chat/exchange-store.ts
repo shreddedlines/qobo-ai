@@ -25,16 +25,35 @@ export interface AppendExchangeInput {
   metadata: Record<string, unknown>;
 }
 
+export interface ReplaceExchangeInput extends Omit<AppendExchangeInput, 'conversationId'> {
+  conversationId: string;
+  /** The person's own saved message whose text is being replaced. */
+  targetMessageId: string;
+}
+
 export interface ExchangeStore {
   findByClientMessageId(userId: string, clientMessageId: string): Promise<StoredExchange | null>;
   /** Atomic and idempotent. Throws ConversationNotFoundError for missing or foreign conversations. */
   append(input: AppendExchangeInput): Promise<StoredExchange>;
+  /**
+   * Replaces one saved exchange in place: same conversation, same position, no second
+   * copy. Atomic and idempotent, like append. Throws MessageNotReplaceableError when
+   * the target is missing, belongs to someone else, or is an assistant reply.
+   */
+  replace(input: ReplaceExchangeInput): Promise<StoredExchange>;
 }
 
 export class ConversationNotFoundError extends Error {
   constructor() {
     super('Conversation not found');
     this.name = 'ConversationNotFoundError';
+  }
+}
+
+export class MessageNotReplaceableError extends Error {
+  constructor() {
+    super('Message not found');
+    this.name = 'MessageNotReplaceableError';
   }
 }
 
@@ -100,6 +119,27 @@ export function createSupabaseExchangeStore(service: Pick<SupabaseClient, 'rpc' 
       const { data, error } = await service.rpc('get_exchange', { p_user_id: userId, p_client_message_id: clientMessageId });
       if (error) throw new DatabaseError('get exchange', error);
       return data ? toStoredExchange(userId, data as ExchangeJson) : null;
+    },
+
+    async replace(input) {
+      const { data, error } = await service.rpc('replace_exchange', {
+        p_user_id: input.userId,
+        p_conversation_id: input.conversationId,
+        p_target_message_id: input.targetMessageId,
+        p_client_message_id: input.clientMessageId,
+        p_title: input.title,
+        p_user_content: input.userContent,
+        p_assistant_content: input.assistantContent,
+        p_intent: input.intent,
+        p_sources: input.sources,
+        p_metadata: input.metadata,
+      });
+      if (error) {
+        if (error.code === 'P0002') throw new ConversationNotFoundError();
+        if (error.code === 'P0003') throw new MessageNotReplaceableError();
+        throw new DatabaseError('replace exchange', error);
+      }
+      return toStoredExchange(input.userId, data as ExchangeJson);
     },
 
     async append(input) {

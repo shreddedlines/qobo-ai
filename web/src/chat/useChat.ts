@@ -5,9 +5,14 @@ import type { SendMessageResponse } from '../api/types.ts';
 import { chatReducer, chatStateFor, type ChatState } from './conversation-state.ts';
 import { runSend } from './send.ts';
 
+export interface SendOptions {
+  /** Editing: replace this saved message and its reply instead of appending. */
+  replaceMessageId?: string | undefined;
+}
+
 export interface UseChat {
   state: ChatState;
-  send: (text: string) => Promise<SendMessageResponse | null>;
+  send: (text: string, options?: SendOptions) => Promise<SendMessageResponse | null>;
   retry: () => Promise<SendMessageResponse | null>;
   stop: () => void;
   dismissFailure: () => void;
@@ -62,7 +67,7 @@ export function useChat(conversationId: string | null): UseChat {
   // Abandon a request in flight when the conversation changes or the page unmounts.
   useEffect(() => () => sendControllerRef.current?.abort(), []);
 
-  const attempt = useCallback(async (text: string): Promise<SendMessageResponse | null> => {
+  const attempt = useCallback(async (text: string, options: SendOptions = {}): Promise<SendMessageResponse | null> => {
     if (stateRef.current.outgoing) return null;
 
     const controller = new AbortController();
@@ -72,6 +77,7 @@ export function useChat(conversationId: string | null): UseChat {
       state: stateRef.current,
       text,
       signal: controller.signal,
+      ...(options.replaceMessageId ? { replaceMessageId: options.replaceMessageId } : {}),
       deps: {
         client: getApiClient(),
         dispatch,

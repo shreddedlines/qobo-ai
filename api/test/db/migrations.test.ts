@@ -268,6 +268,198 @@ describe('append_exchange (service_role)', () => {
   });
 });
 
+describe('replace_exchange (service_role)', () => {
+  /** Replaces a saved exchange the way the API does, returning the new pair. */
+  function serviceReplace(
+    userId: string,
+    conversationId: string,
+    targetMessageId: string,
+    options: { text?: string; clientMessageId?: string; title?: string } = {},
+  ): Promise<Exchange> {
+    const text = options.text ?? 'What do your plans include, and is SEO extra?';
+    return t.as('service_role', null, async (tx) => {
+      const { rows } = await tx.query<{ result: Exchange }>(
+        `select public.replace_exchange($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb) as result`,
+        [
+          userId,
+          conversationId,
+          targetMessageId,
+          options.clientMessageId ?? randomUUID(),
+          options.title ?? text,
+          text,
+          'Starter is ₹499 and SEO is included.',
+          'qobo',
+          JSON.stringify([{ url: 'https://qobo.dev/plans' }]),
+          JSON.stringify({ model: 'test', status: 'answered' }),
+        ],
+      );
+      return rows[0]!.result;
+    });
+  }
+
+  async function messagesOf(conversationId: string): Promise<{ seq: number; role: string; content: string; id: string }[]> {
+    const { rows } = await t.db.query<{ seq: number; role: string; content: string; id: string }>(
+      `select seq, role, content, id from public.messages where conversation_id = $1 order by seq`,
+      [conversationId],
+    );
+    return rows;
+  }
+
+  it('replaces both messages in place, leaving no second copy', async () => {
+    const first = await serviceAppend(alice, null, undefined);
+    const conversationId = first.conversation_id;
+
+    const replaced = await serviceReplace(alice, conversationId, first.user_message.id);
+
+    const rows = await messagesOf(conversationId);
+    assert.equal(rows.length, 2, 'the exchange is replaced, not appended to');
+    assert.deepEqual(
+      rows.map((row) => row.role),
+      ['user', 'assistant'],
+    );
+    assert.equal(rows[0]?.content, 'What do your plans include, and is SEO extra?');
+    assert.equal(rows[1]?.content, 'Starter is ₹499 and SEO is included.');
+    assert.equal(replaced.replayed, false);
+    assert.equal(replaced.conversation_id, conversationId, 'the same conversation');
+  });
+
+  it('keeps the exchange in its original position, with its ids', async () => {
+    const one = await serviceAppend(alice, null, undefined);
+    const conversationId = one.conversation_id;
+    const two = await serviceAppend(alice, conversationId, undefined);
+    const three = await serviceAppend(alice, conversationId, undefined);
+
+    const before = await messagesOf(conversationId);
+    await serviceReplace(alice, conversationId, two.user_message.id, { text: 'edited middle question' });
+    const after = await messagesOf(conversationId);
+
+    assert.equal(after.length, 6, 'nothing added, nothing removed');
+    assert.deepEqual(
+      after.map((row) => row.seq),
+      before.map((row) => row.seq),
+      'seq values are untouched, so the order cannot shift',
+    );
+    assert.deepEqual(
+      after.map((row) => row.id),
+      before.map((row) => row.id),
+      'message ids stay stable, so citation anchors keep working',
+    );
+    assert.equal(after[2]?.content, 'edited middle question', 'the edit sits where the original was');
+    assert.equal(after[0]?.content, before[0]?.content, 'the earlier exchange is untouched');
+    assert.equal(after[4]?.content, before[4]?.content, 'the later exchange is untouched');
+    assert.equal(after[5]?.content, before[5]?.content);
+    assert.equal(three.user_message.id, after[4]?.id);
+  });
+
+  it('replays a repeated edit instead of replacing twice', async () => {
+    const first = await serviceAppend(alice, null, undefined);
+    const key = randomUUID();
+
+    const once = await serviceReplace(alice, first.conversation_id, first.user_message.id, { clientMessageId: key, text: 'edited once' });
+    const twice = await serviceReplace(alice, first.conversation_id, first.user_message.id, { clientMessageId: key, text: 'edited twice' });
+
+    assert.equal(once.replayed, false);
+    assert.equal(twice.replayed, true, 'the same idempotency key returns what was stored');
+    const rows = await messagesOf(first.conversation_id);
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0]?.content, 'edited once', 'the replay does not apply the second text');
+  });
+
+  it("refuses to edit another user's message", async () => {
+    const aliceExchange = await serviceAppend(alice, null, undefined);
+
+    await rejectsWith(serviceReplace(bob, aliceExchange.conversation_id, aliceExchange.user_message.id), /message not found/);
+
+    const rows = await messagesOf(aliceExchange.conversation_id);
+    assert.equal(rows[0]?.content, 'What does QOBO do?', "Alice's message is untouched");
+  });
+
+  it('refuses to edit an assistant reply', async () => {
+    const exchange = await serviceAppend(alice, null, undefined);
+
+    await rejectsWith(serviceReplace(alice, exchange.conversation_id, exchange.assistant_message.id), /message not found/);
+
+    const rows = await messagesOf(exchange.conversation_id);
+    assert.equal(rows[1]?.content, 'QOBO helps businesses launch, grow, and automate.', 'the reply is untouched');
+  });
+
+  it('refuses a message that belongs to a different conversation', async () => {
+    const first = await serviceAppend(alice, null, undefined);
+    const other = await serviceAppend(alice, null, undefined);
+
+    await rejectsWith(serviceReplace(alice, other.conversation_id, first.user_message.id), /message not found/);
+  });
+
+  it('refuses an unknown message and an unknown conversation', async () => {
+    const exchange = await serviceAppend(alice, null, undefined);
+    await rejectsWith(serviceReplace(alice, exchange.conversation_id, randomUUID()), /message not found/);
+    await rejectsWith(serviceReplace(alice, randomUUID(), exchange.user_message.id), /message not found/);
+  });
+
+  it('retitles the conversation when its first message is edited, and not otherwise', async () => {
+    const first = await serviceAppend(alice, null, undefined);
+    const conversationId = first.conversation_id;
+    const second = await serviceAppend(alice, conversationId, undefined);
+
+    await serviceReplace(alice, conversationId, first.user_message.id, { text: 'new opening question', title: 'new opening question' });
+    const { rows: retitled } = await t.db.query<{ title: string }>(`select title from public.conversations where id = $1`, [conversationId]);
+    assert.equal(retitled[0]?.title, 'new opening question');
+
+    await serviceReplace(alice, conversationId, second.user_message.id, { text: 'edited follow-up', title: 'edited follow-up' });
+    const { rows: unchanged } = await t.db.query<{ title: string }>(`select title from public.conversations where id = $1`, [conversationId]);
+    assert.equal(unchanged[0]?.title, 'new opening question', 'editing a later message leaves the title alone');
+  });
+
+  it('moves the conversation up the list by touching updated_at', async () => {
+    const exchange = await serviceAppend(alice, null, undefined);
+    const { rows: before } = await t.db.query<{ updated_at: string }>(`select updated_at from public.conversations where id = $1`, [
+      exchange.conversation_id,
+    ]);
+
+    await serviceReplace(alice, exchange.conversation_id, exchange.user_message.id);
+
+    const { rows: after } = await t.db.query<{ updated_at: string }>(`select updated_at from public.conversations where id = $1`, [
+      exchange.conversation_id,
+    ]);
+    assert.ok(after[0]!.updated_at >= before[0]!.updated_at);
+  });
+
+  it('writes nothing when the replacement content is invalid', async () => {
+    const exchange = await serviceAppend(alice, null, undefined);
+
+    await rejectsWith(
+      t.as('service_role', null, (tx) =>
+        tx.query(`select public.replace_exchange($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb)`, [
+          alice,
+          exchange.conversation_id,
+          exchange.user_message.id,
+          randomUUID(),
+          'title',
+          '',
+          'a reply',
+          'qobo',
+          '[]',
+          '{}',
+        ]),
+      ),
+      /violates check constraint/,
+    );
+
+    const rows = await messagesOf(exchange.conversation_id);
+    assert.equal(rows[0]?.content, 'What does QOBO do?', 'the original exchange survives a rejected edit');
+    assert.equal(rows[1]?.content, 'QOBO helps businesses launch, grow, and automate.');
+  });
+
+  it('is not executable by anon or authenticated', async () => {
+    for (const role of ['anon', 'authenticated'] as const) {
+      await rejectsWith(
+        t.as(role, alice, (tx) => tx.query(`select public.replace_exchange($1, $2, $3, $4, $5, $6, $7, $8)`, [alice, null, null, null, '', '', '', ''])),
+        /permission denied|does not exist/,
+      );
+    }
+  });
+});
+
 describe('quotas (service_role)', () => {
   const consume = (userId: string, limit: number) =>
     t.as('service_role', null, async (tx) => (await tx.query<QuotaRow>(`select * from public.consume_user_quota($1, 'message', $2)`, [userId, limit])).rows[0]!);

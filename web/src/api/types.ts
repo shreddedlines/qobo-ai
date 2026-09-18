@@ -53,6 +53,11 @@ export interface SendMessageRequest {
   /** Client-generated uuid; retrying with the same id replays the saved reply. */
   clientMessageId: string;
   conversationId?: string | null;
+  /**
+   * Editing: replace this saved user message and its reply in place, rather than
+   * appending a new exchange. Requires conversationId.
+   */
+  replaceMessageId?: string | null;
 }
 
 export interface SendMessageResponse {

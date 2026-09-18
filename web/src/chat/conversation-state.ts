@@ -7,6 +7,8 @@ export interface OutgoingMessage {
   text: string;
   /** Epoch ms the current attempt started, used for the waiting state's elapsed time. */
   startedAt: number;
+  /** Set when this send replaces a saved message rather than adding one. */
+  replacesMessageId?: string;
 }
 
 export interface SendFailure {
@@ -34,8 +36,8 @@ export type ChatAction =
   | { type: 'history/loaded'; conversation: ConversationSummary; messages: ChatMessage[] }
   | { type: 'history/failed'; error: unknown }
   | { type: 'conversation/reset' }
-  | { type: 'send/start'; clientMessageId: string; text: string; startedAt: number }
-  | { type: 'send/succeeded'; response: SendMessageResponse }
+  | { type: 'send/start'; clientMessageId: string; text: string; startedAt: number; replacesMessageId?: string }
+  | { type: 'send/succeeded'; response: SendMessageResponse; replacedMessageId?: string }
   | { type: 'send/failed'; error: unknown }
   | { type: 'send/stopped' }
   | { type: 'failure/dismiss' };
@@ -60,6 +62,31 @@ function appendUnique(existing: ChatMessage[], incoming: ChatMessage[]): ChatMes
   const known = new Set(existing.map((message) => message.id));
   const added = incoming.filter((message) => !known.has(message.id));
   return added.length === 0 ? existing : [...existing, ...added];
+}
+
+/**
+ * Puts an edited exchange where the original was: the edited message takes the target's
+ * place and the reply that followed it is replaced by the new one. Nothing is appended
+ * and nothing is hidden — this mirrors what replace_exchange did in the database, so the
+ * screen matches what a reload would fetch.
+ */
+export function replaceExchange(
+  messages: readonly ChatMessage[],
+  targetId: string,
+  userMessage: ChatMessage,
+  assistantMessage: ChatMessage,
+): ChatMessage[] {
+  const target = messages.findIndex((message) => message.id === targetId);
+  if (target === -1) return appendUnique([...messages], [userMessage, assistantMessage]);
+
+  const result = [...messages];
+  result[target] = userMessage;
+
+  const reply = result.findIndex((message, index) => index > target && message.role === 'assistant');
+  if (reply === -1) result.splice(target + 1, 0, assistantMessage);
+  else result[reply] = assistantMessage;
+
+  return result;
 }
 
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
@@ -90,7 +117,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         // The failed attempt is being retried or replaced; its notice goes away.
         failure: null,
-        outgoing: { clientMessageId: action.clientMessageId, text: action.text, startedAt: action.startedAt },
+        outgoing: {
+          clientMessageId: action.clientMessageId,
+          text: action.text,
+          startedAt: action.startedAt,
+          ...(action.replacesMessageId ? { replacesMessageId: action.replacesMessageId } : {}),
+        },
       };
 
     case 'send/succeeded':
@@ -98,7 +130,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         conversationId: action.response.conversation.id,
         title: action.response.conversation.title,
-        messages: appendUnique(state.messages, [action.response.userMessage, action.response.assistantMessage]),
+        messages: action.replacedMessageId
+          ? replaceExchange(state.messages, action.replacedMessageId, action.response.userMessage, action.response.assistantMessage)
+          : appendUnique(state.messages, [action.response.userMessage, action.response.assistantMessage]),
         outgoing: null,
         failure: null,
         lastReplyId: action.response.assistantMessage.id,
@@ -132,6 +166,8 @@ export interface PendingEntry {
   clientMessageId: string;
   text: string;
   startedAt?: number;
+  /** Set when this send replaces a saved message rather than adding one. */
+  replacesMessageId?: string;
 }
 
 /**
@@ -140,12 +176,56 @@ export interface PendingEntry {
  */
 export function pendingEntry(state: ChatState): PendingEntry | null {
   if (state.outgoing) {
-    return { kind: 'waiting', clientMessageId: state.outgoing.clientMessageId, text: state.outgoing.text, startedAt: state.outgoing.startedAt };
+    return {
+      kind: 'waiting',
+      clientMessageId: state.outgoing.clientMessageId,
+      text: state.outgoing.text,
+      startedAt: state.outgoing.startedAt,
+      ...(state.outgoing.replacesMessageId ? { replacesMessageId: state.outgoing.replacesMessageId } : {}),
+    };
   }
   if (state.failure) {
     return { kind: state.failure.stopped ? 'stopped' : 'failed', clientMessageId: state.failure.clientMessageId, text: state.failure.text };
   }
   return null;
+}
+
+export type TimelineEntry = { kind: 'message'; message: ChatMessage } | { kind: 'pending'; pending: PendingEntry };
+
+/**
+ * What the conversation shows, in order.
+ *
+ * An edit being generated stands where the message it replaces stands, and the reply
+ * about to be replaced steps aside for the moment — so the edit never appears at the
+ * bottom and then jump into position. A failed or stopped attempt goes last, next to
+ * the controls for retrying or discarding it, and the original exchange stays visible
+ * because it is still what is stored.
+ */
+export function timeline(state: ChatState): TimelineEntry[] {
+  const pending = pendingEntry(state);
+  const replacingId = pending?.kind === 'waiting' ? pending.replacesMessageId : undefined;
+
+  const entries: TimelineEntry[] = [];
+  let placed = false;
+  let replyStepsAside = false;
+
+  for (const message of state.messages) {
+    if (pending && replacingId && message.id === replacingId) {
+      entries.push({ kind: 'pending', pending });
+      placed = true;
+      replyStepsAside = true;
+      continue;
+    }
+    if (replyStepsAside && message.role === 'assistant') {
+      replyStepsAside = false;
+      continue;
+    }
+    replyStepsAside = false;
+    entries.push({ kind: 'message', message });
+  }
+
+  if (pending && !placed) entries.push({ kind: 'pending', pending });
+  return entries;
 }
 
 /** A send is in flight; the composer switches to Stop and refuses a second message. */

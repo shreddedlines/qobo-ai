@@ -232,3 +232,72 @@ describe('runSend', () => {
     assert.deepEqual(retryActions.reduce(chatReducer, afterFailure).messages, [userMessage, assistantMessage]);
   });
 });
+
+describe('sending an edited message', () => {
+  const editedUser: ChatMessage = { ...userMessage, id: 'u2', content: 'What do your plans include, and is SEO extra?' };
+  const editedReply: ChatMessage = { ...assistantMessage, id: 'a2', content: 'SEO is included.' };
+  const editedResponse: SendMessageResponse = {
+    conversation: { ...conversation, updatedAt: '2026-09-18T10:05:00.000Z' },
+    userMessage: editedUser,
+    assistantMessage: editedReply,
+    replayed: false,
+  };
+
+  /** The state after one ordinary exchange, which is what an edit starts from. */
+  const afterFirstExchange = reduce(
+    initialChatState,
+    { type: 'send/start', clientMessageId: 'first-id', text: userMessage.content, startedAt: 1 },
+    { type: 'send/succeeded', response },
+  );
+
+  it('goes out as a new request, with an id of its own', async () => {
+    const sent: unknown[] = [];
+    const { deps } = fakeDeps(async (request) => {
+      sent.push(request);
+      return editedResponse;
+    }, ['edited-id']);
+
+    await runSend({ state: afterFirstExchange, text: editedUser.content, deps });
+
+    assert.deepEqual(sent, [
+      { message: editedUser.content, clientMessageId: 'edited-id', conversationId: conversation.id },
+    ]);
+  });
+
+  it('adds the edited message and its reply, leaving the original pair in place', async () => {
+    const { deps, actions } = fakeDeps(async () => editedResponse, ['edited-id']);
+    await runSend({ state: afterFirstExchange, text: editedUser.content, deps });
+
+    const state = actions.reduce(chatReducer, afterFirstExchange);
+    assert.deepEqual(
+      state.messages.map((message) => message.id),
+      ['u1', 'a1', 'u2', 'a2'],
+      'history keeps what was already said; the edit is appended',
+    );
+    assert.equal(state.messages[0]?.content, userMessage.content, 'the original message is untouched');
+    assert.equal(state.conversationId, conversation.id, 'the edit stays in the same conversation');
+    assert.equal(state.lastReplyId, 'a2', 'the new reply is the one announced');
+  });
+
+  it('does not reuse a failed attempt id once the text has been edited', () => {
+    const failed = reduce(
+      initialChatState,
+      { type: 'send/start', clientMessageId: 'failed-id', text: 'original wording', startedAt: 1 },
+      { type: 'send/failed', error: new ApiError({ status: 504, code: 'timeout', message: 'too slow' }) },
+    );
+    assert.equal(idForAttempt(failed, 'edited wording', () => 'fresh-id'), 'fresh-id');
+  });
+
+  it('still replays when an edit left the text unchanged', () => {
+    const stopped = reduce(
+      initialChatState,
+      { type: 'send/start', clientMessageId: 'stopped-id', text: 'unchanged wording', startedAt: 1 },
+      { type: 'send/stopped' },
+    );
+    assert.equal(
+      idForAttempt(stopped, 'unchanged wording', () => 'fresh-id'),
+      'stopped-id',
+      'the same question keeps its id, so the API replays instead of answering twice',
+    );
+  });
+});

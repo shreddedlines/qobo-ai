@@ -62,9 +62,9 @@ describe('frontend/backend contract', () => {
 
   it('matches the chat request fields the backend validates', async () => {
     const source = await read('chat/routes.ts');
-    const block = /const chatRequestSchema = z\.object\(\{([\s\S]*?)\n\}\);/.exec(source);
-    assert.ok(block);
-    const fields = [...block[1]!.matchAll(/^\s{2}(\w+):/gm)].map((m) => m[1]!);
-    assert.deepEqual(fields.sort(), ['clientMessageId', 'conversationId', 'message']);
+    const block = /const chatRequestSchema = z\s*\.object\(\{([\s\S]*?)\n\s{2}\}\)/.exec(source);
+    assert.ok(block, 'could not find chatRequestSchema in the backend source');
+    const fields = [...block[1]!.matchAll(/^\s{4}(\w+):/gm)].map((m) => m[1]!);
+    assert.deepEqual(fields.sort(), ['clientMessageId', 'conversationId', 'message', 'replaceMessageId']);
   });
 });

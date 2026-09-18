@@ -190,6 +190,180 @@ describe('POST /api/chat', () => {
   });
 });
 
+/** What the fake chat service answers with unless a test overrides it. */
+const FAKE_REPLY = 'QOBO builds websites through WhatsApp [1].';
+
+describe('POST /api/chat with replaceMessageId (editing a message)', () => {
+  /** A saved conversation with two exchanges, which is what an edit starts from. */
+  async function seedTwoExchanges() {
+    const first = await send({ message: 'What do your plans include?', clientMessageId: randomUUID() });
+    const conversationId = first.body.conversation.id as string;
+    const second = await send({ message: 'Do you offer SEO?', clientMessageId: randomUUID(), conversationId });
+    return { conversationId, first: first.body, second: second.body };
+  }
+
+  const messagesOf = (conversationId: string) => ctx.store.conversations.find((conversation) => conversation.id === conversationId)!.messages;
+
+  it('replaces the message and its reply in place, adding nothing', async () => {
+    const { conversationId, first } = await seedTwoExchanges();
+    const before = messagesOf(conversationId).length;
+
+    ctx.chat.respondWith = {
+      intent: 'qobo',
+      status: 'answered',
+      content: 'A regenerated answer about plans and SEO.',
+      sources: [],
+      metadata: { router: { source: 'model', model: 'router-model', language: 'en', smalltalkType: 'other' }, latencyMs: 7 },
+    };
+    const res = await send({
+      message: 'What do your plans include, and is SEO extra?',
+      clientMessageId: randomUUID(),
+      conversationId,
+      replaceMessageId: first.userMessage.id,
+    });
+
+    assert.equal(res.status, 200);
+    assert.equal(res.body.conversation.id, conversationId, 'the same conversation');
+    assert.equal(res.body.userMessage.content, 'What do your plans include, and is SEO extra?');
+
+    const messages = messagesOf(conversationId);
+    assert.equal(messages.length, before, 'replaced, not appended');
+    assert.equal(messages[0]?.content, 'What do your plans include, and is SEO extra?', 'the edit sits in the original position');
+    assert.equal(messages[0]?.id, first.userMessage.id, 'the message row itself was changed');
+    assert.equal(messages[1]?.role, 'assistant');
+    assert.equal(messages[1]?.content, 'A regenerated answer about plans and SEO.', 'the reply is the newly generated one');
+    assert.notEqual(messages[1]?.content, first.assistantMessage.content, 'the old reply is gone');
+    assert.equal(messages[2]?.content, 'Do you offer SEO?', 'the later exchange is untouched');
+  });
+
+  it('regenerates with the history that preceded the edited message', async () => {
+    const { conversationId, second } = await seedTwoExchanges();
+    ctx.chat.requests.length = 0;
+
+    await send({ message: 'edited follow-up', clientMessageId: randomUUID(), conversationId, replaceMessageId: second.userMessage.id });
+
+    const [regeneration] = ctx.chat.requests;
+    assert.equal(regeneration?.message, 'edited follow-up');
+    assert.deepEqual(
+      (regeneration?.history ?? []).map((turn) => turn.content),
+      ['What do your plans include?', FAKE_REPLY],
+      'the edited turn and anything after it are not context for it',
+    );
+  });
+
+  it('refuses to edit an assistant reply', async () => {
+    const { conversationId, first } = await seedTwoExchanges();
+    ctx.chat.requests.length = 0;
+
+    const res = await send({ message: 'rewritten reply', clientMessageId: randomUUID(), conversationId, replaceMessageId: first.assistantMessage.id });
+
+    assert.equal(res.status, 404);
+    assert.equal(res.body.error.code, 'not_found');
+    assert.equal(ctx.chat.requests.length, 0, 'nothing is generated for an impossible edit');
+    assert.equal(messagesOf(conversationId)[1]?.content, first.assistantMessage.content, 'the reply is untouched');
+  });
+
+  it("refuses to edit someone else's message, without generating or charging", async () => {
+    const other = ctx.verifier.addUser();
+    const foreign = ctx.store.seed(other.user.id, 'Private', '2026-09-01T10:00:00.000Z');
+    ctx.chat.requests.length = 0;
+    ctx.quota.used.clear();
+
+    const res = await send({
+      message: 'trying to edit a stranger',
+      clientMessageId: randomUUID(),
+      conversationId: foreign.id,
+      replaceMessageId: foreign.messages[0]!.id,
+    });
+
+    assert.equal(res.status, 404);
+    assert.equal(ctx.chat.requests.length, 0);
+    assert.equal(ctx.quota.used.size, 0);
+    assert.equal(foreign.messages.length, 2, "the other person's conversation is untouched");
+  });
+
+  it('refuses an unknown message id', async () => {
+    const { conversationId } = await seedTwoExchanges();
+    const res = await send({ message: 'edited', clientMessageId: randomUUID(), conversationId, replaceMessageId: randomUUID() });
+    assert.equal(res.status, 404);
+  });
+
+  it('requires the conversation the message belongs to', async () => {
+    const { first } = await seedTwoExchanges();
+    const res = await send({ message: 'edited', clientMessageId: randomUUID(), replaceMessageId: first.userMessage.id });
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error.code, 'bad_request');
+  });
+
+  it('leaves the conversation exactly as it was when regeneration fails', async () => {
+    const { conversationId, first } = await seedTwoExchanges();
+    const before = structuredClone(messagesOf(conversationId));
+    ctx.chat.respondWith = new AnswerUnavailableError('generation', new Error('models are busy'));
+
+    const res = await send({
+      message: 'an edit that cannot be answered',
+      clientMessageId: randomUUID(),
+      conversationId,
+      replaceMessageId: first.userMessage.id,
+    });
+
+    assert.equal(res.status, 503);
+    assert.deepEqual(messagesOf(conversationId), before, 'no message was changed or removed');
+  });
+
+  it('leaves the conversation as it was when the edit times out', async () => {
+    const { conversationId, first } = await seedTwoExchanges();
+    const before = structuredClone(messagesOf(conversationId));
+    ctx.chat.respondWith = 'hang';
+
+    const res = await send({ message: 'a slow edit', clientMessageId: randomUUID(), conversationId, replaceMessageId: first.userMessage.id });
+
+    assert.equal(res.status, 504);
+    assert.deepEqual(messagesOf(conversationId), before);
+  });
+
+  it('leaves the conversation as it was when the write itself fails', async () => {
+    const { conversationId, first } = await seedTwoExchanges();
+    const before = structuredClone(messagesOf(conversationId));
+    ctx.exchanges.failWith = new DatabaseError('replace exchange', { message: 'boom' });
+
+    const res = await send({ message: 'an edit that cannot be saved', clientMessageId: randomUUID(), conversationId, replaceMessageId: first.userMessage.id });
+
+    assert.equal(res.status, 500);
+    assert.deepEqual(messagesOf(conversationId), before);
+  });
+
+  it('replays a retried edit instead of replacing twice or charging again', async () => {
+    const { conversationId, first } = await seedTwoExchanges();
+    const clientMessageId = randomUUID();
+    ctx.quota.used.clear();
+
+    const once = await send({ message: 'edited once', clientMessageId, conversationId, replaceMessageId: first.userMessage.id });
+    const twice = await send({ message: 'edited once', clientMessageId, conversationId, replaceMessageId: first.userMessage.id });
+
+    assert.equal(once.body.replayed, false);
+    assert.equal(twice.body.replayed, true);
+    assert.equal(twice.body.userMessage.id, once.body.userMessage.id);
+    assert.equal(ctx.quota.used.get(userId), 1, 'a replayed edit does not spend another message');
+    assert.equal(messagesOf(conversationId).length, 4);
+  });
+
+  it('spends one message from the daily cap, like any other turn', async () => {
+    const { conversationId, first } = await seedTwoExchanges();
+    ctx.quota.used.clear();
+
+    await send({ message: 'edited question', clientMessageId: randomUUID(), conversationId, replaceMessageId: first.userMessage.id });
+
+    assert.equal(ctx.quota.used.get(userId), 1);
+  });
+
+  it('rejects a malformed replaceMessageId', async () => {
+    const { conversationId } = await seedTwoExchanges();
+    const res = await send({ message: 'edited', clientMessageId: randomUUID(), conversationId, replaceMessageId: 'not-a-uuid' });
+    assert.equal(res.status, 400);
+  });
+});
+
 describe('chat helpers', () => {
   it('derives short conversation titles', () => {
     assert.equal(titleFromMessage('  What   is QOBO?\n'), 'What is QOBO?');
