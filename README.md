@@ -2,9 +2,10 @@
 
 An AI support assistant for [QOBO](https://qobo.dev/) that answers questions grounded in QOBO's own website, redirects unrelated requests, and uses cited web research for general questions about websites and digital business.
 
-> **Status:** the API is deployed at <https://qobo-support-api.onrender.com> (health: `/api/health`).
-> The React frontend is complete and production-built; deploying it to Vercel needs account
-> access, so its public URL is not live yet. See [deployment](docs/deployment.md).
+> **Status:** live.
+> Frontend: <https://web-lake-two-86.vercel.app>
+> API: <https://qobo-support-api.onrender.com> (health: `/api/health`).
+> See [deployment](docs/deployment.md).
 
 ## Repository layout
 
@@ -16,7 +17,20 @@ An AI support assistant for [QOBO](https://qobo.dev/) that answers questions gro
 | `eval/` | Evaluation questions and generated result reports |
 | `docs/` | Guides: [Supabase setup](docs/supabase-setup.md), [knowledge base](docs/knowledge-base.md), [chat and answer pipeline](docs/answer-pipeline.md), [HTTP API](docs/api.md), [deployment](docs/deployment.md) |
 | `render.yaml`, `.github/workflows/` | Render blueprint, CI checks and the keep-alive ping |
-| `web/` | React 19 + Vite frontend: Supabase auth, chat with citations, conversation history, light/dark themes |
+| `web/` | React 19 + Vite frontend: Supabase auth, chat with citations, conversation history and renaming, message editing, a collapsible sidebar, light/dark themes |
+
+## What the app does
+
+- **Accounts:** email and password sign-up, sign-in and sign-out through Supabase Auth; every API call carries the signed-in user's own token.
+- **QOBO-grounded answers:** questions about QOBO are answered from a vector search over reviewed snapshots of qobo.dev, and the assistant says so when its sources don't cover the question.
+- **Web research:** general questions about websites and digital business are answered from cited web results; unrelated requests are redirected.
+- **Sources:** every answer lists the pages it drew on, labelled as QOBO's website or general web research, with links.
+- **Conversation history:** conversations and their messages persist per user, grouped by recency in the sidebar and restored on reload.
+- **Edit a sent message:** editing one of your own messages replaces that message *and* its reply in place, in the same conversation — nothing is appended and no old version is kept.
+- **Rename a conversation:** conversations can be given a name from the sidebar, which persists across reloads.
+- **Collapsible sidebar:** the sidebar can be hidden so the conversation takes the full width; the preference is remembered. Below desktop width it becomes a drawer.
+- **Generating indicator:** an animated indicator appears as soon as a message is sent and stays until the reply or an error arrives. Replies are not streamed.
+- **Keyboard and theme support:** full keyboard navigation, screen-reader announcements, and light/dark themes that follow the system setting or a manual toggle.
 
 ## Stack
 

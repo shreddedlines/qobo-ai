@@ -28,6 +28,7 @@ Base path `/api`. Every endpoint except health requires `Authorization: Bearer <
 
 - `GET /api/conversations?limit=20&before=<ISO timestamp>` → `{ conversations: ConversationSummary[], nextCursor: string | null }`, newest first
 - `GET /api/conversations/:id/messages` → `{ conversation: ConversationSummary, messages: ChatMessage[] }`, oldest first
+- `PATCH /api/conversations/:id` → `ConversationSummary`. Renames a conversation: `{ "title": "Pricing questions" }`, trimmed, 1–120 characters after trimming (an empty or whitespace-only title is a 400). Only the title changes — `updatedAt` is left alone, so renaming does not reorder the list — and Row Level Security limits the update to the caller's own conversations, so someone else's id is a 404.
 - `DELETE /api/conversations/:id` → 204. The conversation's messages are deleted with it. The daily message count is not reduced.
 
 ## Chat
