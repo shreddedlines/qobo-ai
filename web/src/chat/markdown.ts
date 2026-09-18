@@ -230,3 +230,151 @@ export function parseMarkdown(text: string): Block[] {
   flushParagraph();
   return blocks;
 }
+
+/** Marks that end a clause or sentence, where two in a row is a mistake. */
+const SENTENCE_PUNCTUATION = /[.,;:!?]/;
+/** Closing brackets, which simply close up against what precedes them. */
+const CLOSING_BRACKET = /[)\]}]/;
+const LEADING_PUNCTUATION_RUN = /^[.,;:!?]+/;
+
+/**
+ * Joins the text on either side of a removed citation marker.
+ *
+ * Only this join is repaired, never the rest of the sentence: a model writes markers
+ * with punctuation on both sides ("organic content,[1], while …"), and deleting the
+ * marker would otherwise leave the two marks touching. Punctuation anywhere else —
+ * an ellipsis, an interrobang — is the author's and is left exactly as written.
+ */
+function joinAcrossRemovedMarker(left: string, right: string): string {
+  const leftTrimmed = left.replace(/[ \t]+$/, '');
+  const rightRest = right.replace(/^[ \t]+/, '');
+  const head = rightRest.charAt(0);
+
+  // Ordinary words follow: the gap between them has to survive.
+  if (!SENTENCE_PUNCTUATION.test(head) && !CLOSING_BRACKET.test(head)) {
+    const separated = /[ \t]$/.test(left) || /^[ \t]/.test(right);
+    return separated ? `${leftTrimmed} ${rightRest}` : leftTrimmed + rightRest;
+  }
+
+  const leftMark = leftTrimmed.slice(-1);
+
+  // A bracket closes up. A comma or semicolon stranded in front of it belonged to the
+  // marker that has just gone, so it goes too: "(plans,)" is not a sentence.
+  if (CLOSING_BRACKET.test(head)) {
+    return /[,;:]/.test(leftMark) ? leftTrimmed.slice(0, -1) + rightRest : leftTrimmed + rightRest;
+  }
+
+  if (!SENTENCE_PUNCTUATION.test(leftMark)) return leftTrimmed + rightRest;
+
+  // Both sides carry a mark, so one of the two is redundant. A run of several ("...",
+  // "?!") is deliberate and wins. Otherwise the stronger mark wins: ending a sentence
+  // outranks a comma, so "content,[1]. Paid ads" keeps the full stop, not the comma.
+  const rightRun = LEADING_PUNCTUATION_RUN.exec(rightRest)?.[0] ?? '';
+  const rightOutranksLeft = /[,;:]/.test(leftMark) && /[.!?]/.test(rightRun);
+  return rightRun.length > 1 || rightOutranksLeft ? leftTrimmed.slice(0, -1) + rightRest : leftTrimmed + rightRest.slice(1);
+}
+
+/** Trims the outer edges of a block, where whitespace has no meaning. */
+function trimEdges(nodes: readonly Inline[]): Inline[] {
+  const result = [...nodes];
+  const first = result[0];
+  if (first?.type === 'text') result[0] = { ...first, value: first.value.replace(/^\s+/, '') };
+  const last = result.at(-1);
+  if (last?.type === 'text') result[result.length - 1] = { ...last, value: last.value.replace(/\s+$/, '') };
+  return result.filter((node) => node.type !== 'text' || node.value !== '');
+}
+
+/**
+ * Removes citation markers from one run of inline nodes, repairing each join the
+ * removal creates and leaving every other character alone.
+ */
+export function stripCitations(nodes: readonly Inline[]): Inline[] {
+  const result: Inline[] = [];
+  /** True when the node just skipped was a marker, so the next join is a repair. */
+  let afterMarker = false;
+
+  for (const node of nodes) {
+    if (node.type === 'citation') {
+      afterMarker = true;
+      continue;
+    }
+
+    const cleaned: Inline =
+      node.type === 'strong'
+        ? { type: 'strong', children: stripCitations(node.children) }
+        : node.type === 'em'
+          ? { type: 'em', children: stripCitations(node.children) }
+          : node.type === 'link'
+            ? { type: 'link', href: node.href, children: stripCitations(node.children) }
+            : node;
+
+    const last = result.at(-1);
+    if (cleaned.type === 'text' && last?.type === 'text') {
+      result[result.length - 1] = {
+        type: 'text',
+        value: afterMarker ? joinAcrossRemovedMarker(last.value, cleaned.value) : last.value + cleaned.value,
+      };
+    } else {
+      result.push(cleaned);
+    }
+
+    afterMarker = false;
+  }
+
+  return result;
+}
+
+function hasVisibleContent(nodes: readonly Inline[]): boolean {
+  return nodes.some((node) => {
+    switch (node.type) {
+      case 'text':
+      case 'code':
+        return node.value.trim() !== '';
+      case 'citation':
+        return false;
+      default:
+        return hasVisibleContent(node.children);
+    }
+  });
+}
+
+/**
+ * The reply without its inline [n] markers.
+ *
+ * The sources themselves are unaffected: they are listed under the answer, where each
+ * one is a link. Only the numbers inside the sentences go, along with any block that
+ * held nothing else.
+ */
+export function withoutCitations(blocks: readonly Block[]): Block[] {
+  const result: Block[] = [];
+
+  for (const block of blocks) {
+    switch (block.type) {
+      case 'code':
+        result.push(block);
+        break;
+      case 'list': {
+        const items = block.items.map((item) => trimEdges(stripCitations(item))).filter(hasVisibleContent);
+        if (items.length > 0) result.push({ type: 'list', ordered: block.ordered, items });
+        break;
+      }
+      case 'heading': {
+        const children = trimEdges(stripCitations(block.children));
+        if (hasVisibleContent(children)) result.push({ type: 'heading', level: block.level, children });
+        break;
+      }
+      case 'quote': {
+        const children = trimEdges(stripCitations(block.children));
+        if (hasVisibleContent(children)) result.push({ type: 'quote', children });
+        break;
+      }
+      case 'paragraph': {
+        const children = trimEdges(stripCitations(block.children));
+        if (hasVisibleContent(children)) result.push({ type: 'paragraph', children });
+        break;
+      }
+    }
+  }
+
+  return result;
+}

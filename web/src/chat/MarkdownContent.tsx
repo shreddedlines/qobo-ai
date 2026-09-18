@@ -1,15 +1,13 @@
 import type { ReactNode } from 'react';
 
 import type { Source } from '../api/types.ts';
-import { Citation } from './Citation.tsx';
 import type { Block, Inline } from './markdown.ts';
-import { parseMarkdown } from './markdown.ts';
+import { parseMarkdown, withoutCitations } from './markdown.ts';
 
 export interface MarkdownContentProps {
   content: string;
-  /** Sources for this message; citation numbers point into them. */
+  /** Sources for this message, listed under the answer by SourceStrip. */
   sources: readonly Source[];
-  /** Used to link a marker to this message's own copy of the source. */
   messageId: string;
 }
 
@@ -46,7 +44,8 @@ function renderInline(nodes: readonly Inline[], context: { sources: readonly Sou
           </a>
         );
       case 'citation':
-        return <Citation key={key} numbers={node.numbers} sources={context.sources} messageId={context.messageId} />;
+        // Markers are removed before rendering; this keeps the switch exhaustive.
+        return null;
     }
   });
 }
@@ -103,9 +102,12 @@ function renderBlock(block: Block, key: number, context: { sources: readonly Sou
 /**
  * Renders an assistant reply. The Markdown is parsed to data and rendered as React
  * elements, so no HTML from the model is ever inserted into the page.
+ *
+ * The inline [n] markers are stripped: the answer reads as prose, and the pages it came
+ * from stay listed and clickable under it.
  */
 export function MarkdownContent({ content, sources, messageId }: MarkdownContentProps) {
-  const blocks = parseMarkdown(content);
+  const blocks = withoutCitations(parseMarkdown(content));
   const context = { sources, messageId };
   return <div className="flex flex-col gap-3">{blocks.map((block, index) => renderBlock(block, index, context))}</div>;
 }

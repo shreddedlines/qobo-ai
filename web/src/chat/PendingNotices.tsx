@@ -25,9 +25,28 @@ export interface WaitingNoticeProps {
 }
 
 /**
- * The honest waiting state: a reply arrives complete or not at all, so nothing here
- * pretends text is being typed. It says what QOBO is doing and how long it has been
- * going; Stop lives in the composer, in place of Send, so there is exactly one Stop.
+ * Three dots that rise in turn: a visual sign that work is in progress. Decorative, so
+ * it is hidden from assistive technology — the status text beside it carries the meaning.
+ */
+function TypingDots() {
+  return (
+    <span aria-hidden="true" className="flex items-center gap-1">
+      {[0, 1, 2].map((index) => (
+        <span
+          key={index}
+          className="size-1.5 rounded-full bg-muted animate-typing-dot"
+          style={{ animationDelay: `${index * 0.16}s` }}
+        />
+      ))}
+    </span>
+  );
+}
+
+/**
+ * The waiting state, shown from the moment a message is sent until the reply arrives or
+ * the attempt fails. The dots animate to show the request is being worked on, but the
+ * words stay honest: a reply arrives complete, so nothing here pretends text is being
+ * typed into place. Stop lives in the composer, in place of Send.
  *
  * The status text stays stable for screen readers; only the seconds change visually, so
  * the live region does not announce a new number every second.
@@ -37,9 +56,10 @@ export function WaitingNotice({ startedAt }: WaitingNoticeProps) {
   const slow = seconds >= 20;
 
   return (
-    <div className="flex items-center gap-3" aria-busy="true">
+    <div className="flex items-center gap-2.5" aria-busy="true">
+      <TypingDots />
       <p role="status" className="text-[14px] text-muted">
-        {slow ? 'Still working. A detailed answer can take a minute.' : 'QOBO is reading its website for an answer.'}
+        {slow ? 'Still generating — a detailed answer can take a minute.' : 'Generating an answer from QOBO’s website…'}
         {seconds >= 5 ? (
           <span aria-hidden="true" className="ml-2 tabular-nums text-muted">
             {seconds}s

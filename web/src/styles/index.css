@@ -34,9 +34,27 @@
 
   --shadow-soft: var(--shadow-soft);
 
+  /* The typing indicator shown while an answer is being generated. Under
+     prefers-reduced-motion the base layer collapses its duration, leaving the dots
+     static and the label doing the work. */
+  --animate-typing-dot: typing-dot 1.2s ease-in-out infinite;
+
   /* Inter carries the interface; Poppins is restricted to the wordmark and one headline. */
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-display: 'Poppins', 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+@keyframes typing-dot {
+  0%,
+  70%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  35% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
 }
 
 @layer base {
