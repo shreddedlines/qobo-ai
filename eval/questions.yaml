@@ -12,6 +12,8 @@
     status: answered
     citesAny: ["https://qobo.dev/"]
     containsAny: [launch, grow, automate]
+    groundedInKb: true
+    maxSources: 6
 
 - id: services
   tags: [qobo]
@@ -21,6 +23,7 @@
     status: answered
     containsAny: [SEO, automation, marketing]
     containsAll: [website]
+    groundedInKb: true
 
 - id: ecommerce
   tags: [qobo]
@@ -30,6 +33,7 @@
     status: answered
     citesAny: ["https://qobo.dev/whatsapp-website-builder", "https://qobo.dev/"]
     containsAny: [UPI, catalog, e-commerce, ecommerce, online store]
+    groundedInKb: true
 
 - id: how-builder-works
   tags: [qobo]
@@ -38,6 +42,7 @@
     intent: qobo
     status: answered
     containsAll: [WhatsApp]
+    groundedInKb: true
 
 - id: refunds
   tags: [qobo]
@@ -47,6 +52,8 @@
     status: answered
     citesAny: ["https://qobo.dev/cancellation-refunds"]
     containsAny: ["24 hours", "7-14", "7–14", "business days"]
+    groundedInKb: true
+    citesAll: ["https://qobo.dev/cancellation-refunds"]
 
 - id: founder
   tags: [qobo]
@@ -55,6 +62,10 @@
     intent: qobo
     status: answered
     containsAll: [Gaurav Save]
+    groundedInKb: true
+    citesAll: ["https://qobo.dev/our-team"]
+    citesOnly: ["https://qobo.dev/our-team", "https://qobo.dev/"]
+    maxSources: 6
 
 - id: whatsapp-number
   tags: [qobo]
@@ -63,6 +74,9 @@
     intent: qobo
     status: answered
     containsAll: ["99016 31188"]
+    groundedInKb: true
+    citesAll: ["https://qobo.dev/contact-us"]
+    citesOnly: ["https://qobo.dev/contact-us", "https://qobo.dev/"]
 
 - id: unsupported-office
   tags: [qobo]
@@ -70,6 +84,7 @@
   expect:
     intent: qobo
     status: insufficient
+    groundedInKb: true
 
 - id: pricing-cost
   tags: [qobo, pricing]
@@ -81,6 +96,8 @@
     containsAll: ["₹499"]
     containsAny: [confirm]
     notContains: ["₹2,499", "₹4,999", "₹35/kg", "₹40/kg"]
+    groundedInKb: true
+    citesAll: ["https://qobo.dev/plans"]
 
 - id: pricing-billing-model
   tags: [qobo, pricing]
@@ -90,6 +107,7 @@
     status: answered
     containsAll: ["₹499"]
     containsAny: [confirm]
+    groundedInKb: true
 
 - id: pricing-lifetime
   tags: [qobo, pricing]
@@ -98,6 +116,7 @@
     intent: qobo
     status: answered
     containsAny: [confirm]
+    groundedInKb: true
 
 - id: pricing-pro
   tags: [qobo, pricing]
@@ -106,6 +125,8 @@
     intent: qobo
     status: answered
     containsAll: ["₹999"]
+    groundedInKb: true
+    citesAll: ["https://qobo.dev/plans"]
 
 - id: pricing-free-trial
   tags: [qobo, pricing]
@@ -114,6 +135,7 @@
     intent: qobo
     status: answered
     containsAny: [free]
+    groundedInKb: true
 
 - id: pricing-hinglish
   tags: [qobo, pricing]
@@ -123,6 +145,7 @@
     status: answered
     containsAll: ["₹499"]
     containsAny: [confirm, "पुष्टि", "confirm kar"]
+    groundedInKb: true
 
 - id: mockup-prices
   tags: [qobo, pricing]
@@ -130,6 +153,7 @@
   expect:
     intent: qobo
     notContains: ["₹4,999", "₹2,499"]
+    groundedInKb: true
 
 - id: stats-roas
   tags: [qobo, statistics]
@@ -139,6 +163,7 @@
     status: answered
     containsAny: [website]
     notContains: [we guarantee, guaranteed ROAS]
+    groundedInKb: true
 
 - id: stats-websites-count
   tags: [qobo, statistics]
@@ -147,6 +172,7 @@
     intent: qobo
     status: answered
     containsAll: ["1,000+", "5,000+"]
+    groundedInKb: true
 
 # ---------------------------------------------------------------------------
 # M5: routing, web research, off-topic redirects, small talk
@@ -161,6 +187,7 @@
     citesWeb: true
     containsAll: [General information]
     notContains: [qobo.dev/plans]
+    maxSources: 8
 
 - id: general-whatsapp-business-api
   tags: [routing, web]
@@ -178,6 +205,8 @@
     intentIn: [general, qobo]
     status: answered
     citesAny: ["https://qobo.dev/seo-services", "https://qobo.dev/"]
+    groundedInKb: true
+    maxSources: 8
 
 - id: general-domain-hosting
   tags: [routing, web]
@@ -288,6 +317,7 @@
     intent: qobo
     status: answered
     containsAll: ["₹999"]
+    groundedInKb: true
 
 - id: routing-qobo-service-request
   tags: [routing, qobo]
@@ -296,3 +326,4 @@
     intent: qobo
     status: answered
     containsAny: [WhatsApp, online store, e-commerce]
+    groundedInKb: true

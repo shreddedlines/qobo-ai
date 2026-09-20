@@ -37,6 +37,37 @@ function escapeCell(text: string): string {
   return text.replace(/\|/g, '\\|').replace(/\n/g, ' ');
 }
 
+/** Cited pages and which citation checks the case applied, so the new checks are visible per case. */
+function citationCell(testCase: EvalCase, answer?: ChatReply): string {
+  if (!answer) return '—';
+  const applied = [
+    testCase.expect.citesAny && 'citesAny',
+    testCase.expect.citesAll && 'citesAll',
+    testCase.expect.citesOnly && 'citesOnly',
+    testCase.expect.maxSources !== undefined && 'maxSources',
+    testCase.expect.groundedInKb && 'groundedInKb',
+  ].filter((name): name is string => typeof name === 'string');
+  const suffix = applied.length > 0 ? ` [${applied.join(', ')}]` : '';
+
+  if (answer.sources.length === 0) return `none${suffix}`;
+  const kinds = [...new Set(answer.sources.map((source) => source.kind))].sort().join('+');
+  return `${answer.sources.length} ${kinds}${suffix}`;
+}
+
+/** How many cases apply each citation/grounding assertion. */
+function citationCheckCounts(cases: EvalCase[]): string {
+  const counts = {
+    citesAny: cases.filter((c) => c.expect.citesAny).length,
+    citesAll: cases.filter((c) => c.expect.citesAll).length,
+    citesOnly: cases.filter((c) => c.expect.citesOnly).length,
+    maxSources: cases.filter((c) => c.expect.maxSources !== undefined).length,
+    groundedInKb: cases.filter((c) => c.expect.groundedInKb).length,
+  };
+  return Object.entries(counts)
+    .map(([name, count]) => `${name} ${count}`)
+    .join(', ');
+}
+
 async function main(): Promise<void> {
   const suite = evalSuiteSchema.parse(parse(await readFile(path.join(repoRoot, 'eval', 'questions.yaml'), 'utf8')));
   const tags = argValues('--tags');
@@ -86,9 +117,10 @@ async function main(): Promise<void> {
     `- Models: router ${env.GEMINI_ROUTER_MODEL}, answer ${env.GEMINI_ANSWER_MODEL} (fallback ${env.GEMINI_ANSWER_FALLBACK_MODEL || 'none'}), embeddings ${env.GEMINI_EMBEDDING_MODEL}`,
     `- Retrieval: top ${env.KB_MATCH_COUNT}, min similarity ${env.KB_MIN_SIMILARITY}`,
     `- **Passed ${passed}/${results.length}**; by tag: ${[...byTag].map(([tag, s]) => `${tag} ${s.passed}/${s.total}`).join(', ')}`,
+    `- Citation checks in use: ${citationCheckCounts(cases)}`,
     '',
-    '| Case | Result | Intent (router) | Status | Path outcome | Web search | Model | Latency | Guards | Notes |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    '| Case | Result | Intent (router) | Status | Path outcome | Web search | Model | Latency | Citations | Guards | Notes |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
     ...results.map((r) => {
       const m = r.answer?.metadata;
       const pathMeta = m?.qobo ?? m?.general;
@@ -102,6 +134,7 @@ async function main(): Promise<void> {
         m?.general ? `${m.general.webSearch} (${m.general.webResultCount})` : '—',
         pathMeta?.model ?? m?.router.model ?? '—',
         m ? `${m.latencyMs}ms` : '—',
+        escapeCell(citationCell(r.testCase, r.answer)),
         guards || '—',
         escapeCell(r.failures.join('; ')) || '—',
       ]
