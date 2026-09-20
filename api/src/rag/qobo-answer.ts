@@ -1,7 +1,7 @@
 import type { Source } from '../conversations/types.ts';
 import { applyDiscrepancyGuards, applyStatisticAttributionGuard } from './answer-guards.ts';
 import { DISCREPANCIES, findRelevantDiscrepancies, type Discrepancy } from './discrepancies.ts';
-import { InvalidModelOutputError, type AnswerGenerator } from './generator.ts';
+import { InvalidModelOutputError, type AnswerGenerator, type StreamHandlers } from './generator.ts';
 import { buildAnswerPrompt, QOBO_ANSWER_SYSTEM_INSTRUCTION, type HistoryTurn } from './prompts.ts';
 import { CONTACT_SOURCE, contactSentence } from './qobo-facts.ts';
 import type { KbRetriever } from './retriever.ts';
@@ -31,6 +31,12 @@ export interface QoboAnswerRequest {
   history?: HistoryTurn[];
   /** Self-contained rewrite used for retrieval (e.g. from the router for follow-ups). Defaults to `question`. */
   retrievalQuery?: string;
+  /**
+   * Reports the answer as the model writes it, for display only. Nothing about the
+   * result changes: the same draft is validated, cited and guarded either way, and a
+   * draft this service rejects is retracted with `onReset` before the fixed reply.
+   */
+  stream?: StreamHandlers;
 }
 
 export interface QoboAnswerService {
@@ -63,7 +69,7 @@ export interface QoboAnswerServiceDeps {
  */
 export function createQoboAnswerService({ retriever, generator, discrepancies = DISCREPANCIES, historyTurns = 6, now = Date.now }: QoboAnswerServiceDeps): QoboAnswerService {
   return {
-    async answer({ question, history = [], retrievalQuery }) {
+    async answer({ question, history = [], retrievalQuery, stream }) {
       const startedAt = now();
       const trimmedQuestion = question.trim();
       const searchQuery = retrievalQuery?.trim() || trimmedQuestion;
@@ -90,12 +96,16 @@ export function createQoboAnswerService({ retriever, generator, discrepancies = 
         guards,
         latencyMs: now() - startedAt,
       });
-      const notFound = (outcome: QoboAnswerOutcome): QoboAnswer => ({
-        status: 'insufficient',
-        content: NOT_FOUND_ANSWER,
-        sources: [CONTACT_SOURCE],
-        metadata: metadata(outcome),
-      });
+      const notFound = (outcome: QoboAnswerOutcome): QoboAnswer => {
+        // Whatever was streamed belongs to a draft that is now discarded.
+        stream?.onReset?.();
+        return {
+          status: 'insufficient',
+          content: NOT_FOUND_ANSWER,
+          sources: [CONTACT_SOURCE],
+          metadata: metadata(outcome),
+        };
+      };
 
       if (chunks.length === 0) return notFound('no_context');
 
@@ -104,7 +114,8 @@ export function createQoboAnswerService({ retriever, generator, discrepancies = 
 
       let draft;
       try {
-        draft = await generator.generate({ systemInstruction: QOBO_ANSWER_SYSTEM_INSTRUCTION, prompt });
+        const request = { systemInstruction: QOBO_ANSWER_SYSTEM_INSTRUCTION, prompt };
+        draft = stream && generator.generateStream ? await generator.generateStream(request, stream) : await generator.generate(request);
       } catch (error) {
         if (error instanceof InvalidModelOutputError) {
           usedModel = generator.model;

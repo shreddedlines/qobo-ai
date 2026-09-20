@@ -1,4 +1,5 @@
 import type { Intent, Source } from '../conversations/types.ts';
+import type { StreamHandlers } from '../rag/generator.ts';
 import type { HistoryTurn } from '../rag/prompts.ts';
 import type { QoboAnswerMetadata, QoboAnswerService } from '../rag/qobo-answer.ts';
 import type { GeneralAnswerMetadata, GeneralAnswerService } from './general-answer.ts';
@@ -25,6 +26,12 @@ export interface ChatReply {
 export interface ChatRequest {
   message: string;
   history?: HistoryTurn[];
+  /**
+   * Reports the answer as it is written, for display only. Fixed replies (off-topic,
+   * small talk) never reach a model, so they stream nothing; the reply this method
+   * resolves is authoritative either way.
+   */
+  stream?: StreamHandlers;
 }
 
 export interface ChatService {
@@ -45,7 +52,7 @@ export interface ChatServiceDeps {
  */
 export function createChatService({ router, qobo, general, now = Date.now }: ChatServiceDeps): ChatService {
   return {
-    async respond({ message, history = [] }) {
+    async respond({ message, history = [], stream }) {
       const startedAt = now();
       const decision = await router.route({ message, history });
       const routerMetadata: ChatMetadata['router'] = {
@@ -68,7 +75,7 @@ export function createChatService({ router, qobo, general, now = Date.now }: Cha
           return finish({ intent: 'smalltalk', status: 'answered', content: smalltalkReply(decision.smalltalkType, decision.language), sources: [] });
 
         case 'general': {
-          const answer = await general.answer({ question: message, webSearchQuery: decision.webSearchQuery, history });
+          const answer = await general.answer({ question: message, webSearchQuery: decision.webSearchQuery, history, ...(stream ? { stream } : {}) });
           if (answer.status === 'redirected') {
             // The model tried to produce code or similar despite the rules.
             return finish({ intent: 'off_topic', status: 'redirected', content: offTopicReply(decision.language), sources: [] }, { general: answer.metadata });
@@ -77,7 +84,7 @@ export function createChatService({ router, qobo, general, now = Date.now }: Cha
         }
 
         case 'qobo': {
-          const answer = await qobo.answer({ question: message, history, retrievalQuery: decision.standaloneQuery });
+          const answer = await qobo.answer({ question: message, history, retrievalQuery: decision.standaloneQuery, ...(stream ? { stream } : {}) });
           return finish({ intent: 'qobo', status: answer.status, content: answer.content, sources: answer.sources }, { qobo: answer.metadata });
         }
       }

@@ -189,6 +189,11 @@ export class InMemoryExchangeStore implements ExchangeStore {
 
 export class FakeChatService implements ChatService {
   readonly requests: ChatRequest[] = [];
+  /**
+   * Handed to `request.stream` before the reply resolves, in order: a string is a
+   * delta, `null` is a reset (a retry or the fallback discarding what came before).
+   */
+  streamChunks: Array<string | null> | undefined;
   respondWith: ChatReply | Error | 'hang' = {
     intent: 'qobo',
     status: 'answered',
@@ -199,6 +204,12 @@ export class FakeChatService implements ChatService {
 
   async respond(request: ChatRequest): Promise<ChatReply> {
     this.requests.push(request);
+    if (request.stream) {
+      for (const chunk of this.streamChunks ?? []) {
+        if (chunk === null) request.stream.onReset?.();
+        else request.stream.onDelta(chunk);
+      }
+    }
     if (this.respondWith === 'hang') return new Promise<never>(() => undefined);
     if (this.respondWith instanceof Error) throw this.respondWith;
     return this.respondWith;

@@ -239,3 +239,46 @@ describe('citation helpers for mixed replies', () => {
     );
   });
 });
+
+describe('general answers retract a draft they do not use', () => {
+  const recorder = () => {
+    const counts = { resets: 0 };
+    return { counts, stream: { onDelta: () => undefined, onReset: () => void (counts.resets += 1) } };
+  };
+
+  it('retracts when the draft is insufficient', async () => {
+    const { counts, stream } = recorder();
+    const { service: general } = service({ generator: new FakeJsonGenerator({ status: 'insufficient', answer: '', qobo_note: '', citations: [] }) });
+
+    const result = await general.answer({ question: 'q', webSearchQuery: 'q', stream });
+
+    assert.equal(result.content, GENERAL_NOT_FOUND);
+    assert.equal(result.metadata.outcome, 'insufficient');
+    assert.equal(counts.resets, 1);
+  });
+
+  it('retracts when the answer cites nothing the model was given', async () => {
+    const { counts, stream } = recorder();
+    const { service: general } = service({
+      generator: new FakeJsonGenerator({ status: 'answered', answer: 'A website presents information.', qobo_note: '', citations: [] }),
+    });
+
+    const result = await general.answer({ question: 'q', webSearchQuery: 'q', stream });
+
+    assert.equal(result.metadata.outcome, 'ungrounded');
+    assert.equal(counts.resets, 1);
+  });
+
+  it('retracts when the draft turns out to contain code and becomes a redirect', async () => {
+    const { counts, stream } = recorder();
+    const { service: general } = service({
+      generator: new FakeJsonGenerator({ status: 'answered', answer: 'Here you go [W1]:\n```js\nalert(1)\n```', qobo_note: '', citations: ['W1'] }),
+    });
+
+    const result = await general.answer({ question: 'q', webSearchQuery: 'q', stream });
+
+    assert.equal(result.status, 'redirected');
+    assert.equal(result.metadata.outcome, 'code_blocked');
+    assert.equal(counts.resets, 1, 'the code draft is dropped before the off-topic redirect replaces it');
+  });
+});

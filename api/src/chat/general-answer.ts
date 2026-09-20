@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { Source } from '../conversations/types.ts';
 import { applyDiscrepancyGuards, applyStatisticAttributionGuard } from '../rag/answer-guards.ts';
 import { DISCREPANCIES, findRelevantDiscrepancies, type Discrepancy } from '../rag/discrepancies.ts';
-import { InvalidModelOutputError, type JsonGenerator } from '../rag/generator.ts';
+import { InvalidModelOutputError, isStreamingJsonGenerator, type JsonGenerator, type StreamHandlers } from '../rag/generator.ts';
 import { escapePromptText, type HistoryTurn } from '../rag/prompts.ts';
 import { AnswerUnavailableError } from '../rag/qobo-answer.ts';
 import type { KbRetriever } from '../rag/retriever.ts';
@@ -38,6 +38,12 @@ export interface GeneralAnswerRequest {
   question: string;
   webSearchQuery: string;
   history?: HistoryTurn[];
+  /**
+   * Reports the general answer as the model writes it, for display only. The label,
+   * the QOBO note and the resolved citations are added afterwards, so a draft this
+   * service rejects is retracted with `onReset` first.
+   */
+  stream?: StreamHandlers;
 }
 
 export interface GeneralAnswerService {
@@ -171,7 +177,7 @@ export function createGeneralAnswerService({ search, quota, retriever, generator
   }
 
   return {
-    async answer({ question, webSearchQuery, history = [] }) {
+    async answer({ question, webSearchQuery, history = [], stream }) {
       const startedAt = now();
       const [web, chunks] = await Promise.all([runWebSearch(webSearchQuery || question), retrieveQoboContext(question)]);
 
@@ -194,16 +200,21 @@ export function createGeneralAnswerService({ search, quota, retriever, generator
         latencyMs: now() - startedAt,
         ...extra,
       });
-      const notFound = (outcome: GeneralAnswerOutcome): GeneralAnswer => ({ status: 'insufficient', content: GENERAL_NOT_FOUND, sources: [], metadata: metadata(outcome) });
+      const notFound = (outcome: GeneralAnswerOutcome): GeneralAnswer => {
+        // Whatever was streamed belongs to a draft that is now discarded.
+        stream?.onReset?.();
+        return { status: 'insufficient', content: GENERAL_NOT_FOUND, sources: [], metadata: metadata(outcome) };
+      };
 
       let draft;
       try {
-        const result = await generator.generate({
+        const request = {
           systemInstruction: hasWeb ? GENERAL_SYSTEM_INSTRUCTION : GENERAL_NO_WEB_SYSTEM_INSTRUCTION,
           prompt: buildGeneralPrompt({ question, history: history.slice(-historyTurns), web: webSources, qobo: qoboSources, discrepancies: chunks.length > 0 ? relevant : [] }),
           responseJsonSchema: GENERAL_RESPONSE_SCHEMA,
           schema: generalDraftSchema,
-        });
+        };
+        const result = stream && isStreamingJsonGenerator(generator) ? await generator.generateStream(request, stream) : await generator.generate(request);
         draft = result.value;
         usedModel = result.model;
       } catch (error) {
@@ -216,6 +227,7 @@ export function createGeneralAnswerService({ search, quota, retriever, generator
 
       if (draft.status === 'insufficient' || !draft.answer.trim()) return notFound('insufficient');
       if (CODE_BLOCK.test(draft.answer) || CODE_BLOCK.test(draft.qobo_note)) {
+        stream?.onReset?.(); // the draft is replaced by the off-topic redirect
         return { status: 'redirected', content: '', sources: [], metadata: metadata('code_blocked') };
       }
 

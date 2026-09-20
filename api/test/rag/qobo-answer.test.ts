@@ -163,4 +163,34 @@ describe('QOBO answer service', () => {
     }).answer({ question: 'What ROAS do you get?' });
     assert.deepEqual(attributed.metadata.guards, []);
   });
+  it('retracts a streamed draft it decides not to use', async () => {
+    const chunks = [kbChunk('https://qobo.dev/', 'QOBO helps businesses launch, grow and automate.')];
+    const drafts = [
+      { draft: { status: 'insufficient' as const, answer: '', citations: [] }, outcome: 'insufficient' },
+      { draft: { status: 'answered' as const, answer: 'We have an office in London.', citations: [] }, outcome: 'ungrounded' },
+    ];
+
+    for (const { draft, outcome } of drafts) {
+      let resets = 0;
+      const result = await createQoboAnswerService({ retriever: new FakeRetriever(chunks), generator: new FakeGenerator(draft) }).answer({
+        question: 'q',
+        stream: { onDelta: () => undefined, onReset: () => void (resets += 1) },
+      });
+
+      assert.equal(result.metadata.outcome, outcome);
+      assert.equal(result.content, NOT_FOUND_ANSWER);
+      assert.equal(resets, 1, `${outcome}: the caller is told to drop what it streamed`);
+    }
+  });
+
+  it('retracts before the fixed reply even when nothing was retrieved', async () => {
+    let resets = 0;
+    const result = await createQoboAnswerService({
+      retriever: new FakeRetriever([]),
+      generator: new FakeGenerator({ status: 'answered', answer: 'x [S1]', citations: ['S1'] }),
+    }).answer({ question: 'Office in London?', stream: { onDelta: () => undefined, onReset: () => void (resets += 1) } });
+
+    assert.equal(result.metadata.outcome, 'no_context');
+    assert.equal(resets, 1);
+  });
 });
