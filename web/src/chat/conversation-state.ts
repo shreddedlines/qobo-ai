@@ -9,6 +9,12 @@ export interface OutgoingMessage {
   startedAt: number;
   /** Set when this send replaces a saved message rather than adding one. */
   replacesMessageId?: string;
+  /**
+   * The reply as it is being written, for display only. It is never the answer: the
+   * label, the resolved citations and any guard notes arrive only with the saved
+   * reply, so this is discarded the moment that lands.
+   */
+  streamingText: string;
 }
 
 export interface SendFailure {
@@ -37,6 +43,10 @@ export type ChatAction =
   | { type: 'history/failed'; error: unknown }
   | { type: 'conversation/reset' }
   | { type: 'send/start'; clientMessageId: string; text: string; startedAt: number; replacesMessageId?: string }
+  /** More of the reply arrived. */
+  | { type: 'send/delta'; text: string }
+  /** The reply is being written again from the start; what was shown is void. */
+  | { type: 'send/reset' }
   | { type: 'send/succeeded'; response: SendMessageResponse; replacedMessageId?: string }
   | { type: 'send/failed'; error: unknown }
   | { type: 'send/stopped' }
@@ -122,8 +132,19 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           text: action.text,
           startedAt: action.startedAt,
           ...(action.replacesMessageId ? { replacesMessageId: action.replacesMessageId } : {}),
+          streamingText: '',
         },
       };
+
+    // Late frames from an attempt that is already over are ignored, the same way a
+    // late failure is. A delta that is not text is dropped rather than shown.
+    case 'send/delta':
+      if (!state.outgoing || typeof action.text !== 'string' || action.text === '') return state;
+      return { ...state, outgoing: { ...state.outgoing, streamingText: state.outgoing.streamingText + action.text } };
+
+    case 'send/reset':
+      if (!state.outgoing || state.outgoing.streamingText === '') return state;
+      return { ...state, outgoing: { ...state.outgoing, streamingText: '' } };
 
     case 'send/succeeded':
       return {
@@ -168,6 +189,8 @@ export interface PendingEntry {
   startedAt?: number;
   /** Set when this send replaces a saved message rather than adding one. */
   replacesMessageId?: string;
+  /** The reply so far, while it is being written. Empty until the first of it arrives. */
+  streamingText?: string;
 }
 
 /**
@@ -182,6 +205,7 @@ export function pendingEntry(state: ChatState): PendingEntry | null {
       text: state.outgoing.text,
       startedAt: state.outgoing.startedAt,
       ...(state.outgoing.replacesMessageId ? { replacesMessageId: state.outgoing.replacesMessageId } : {}),
+      streamingText: state.outgoing.streamingText,
     };
   }
   if (state.failure) {

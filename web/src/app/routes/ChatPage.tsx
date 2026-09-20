@@ -6,7 +6,8 @@ import { Composer } from '../../chat/Composer.tsx';
 import { pendingEntry, timeline } from '../../chat/conversation-state.ts';
 import { activeEdit, composerKey, startEditing, type MessageEdit } from '../../chat/editing.ts';
 import { MessageView, UserMessage } from '../../chat/MessageView.tsx';
-import { SendFailureNotice, WaitingNotice } from '../../chat/PendingNotices.tsx';
+import { SendFailureNotice, StreamingReply, WaitingNotice } from '../../chat/PendingNotices.tsx';
+import { isFollowingBottom, readViewportPosition } from '../../chat/scroll.ts';
 import { useChat } from '../../chat/useChat.ts';
 import { useHistory } from '../../history/HistoryProvider.tsx';
 import { Button } from '../../ui/Button.tsx';
@@ -53,6 +54,30 @@ export function ChatPage() {
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' });
   }, [state.messages.length, pending?.kind]);
+
+  /**
+   * Whether the person is following the newest text. Kept from their own scrolling
+   * rather than measured after a reply grows: by then the page is already taller, so a
+   * long piece of text arriving at once would look like they had scrolled away.
+   */
+  const followingRef = useRef(true);
+  useEffect(() => {
+    const update = () => {
+      const position = readViewportPosition();
+      if (position) followingRef.current = isFollowingBottom(position);
+    };
+    update();
+    window.addEventListener('scroll', update, { passive: true });
+    return () => window.removeEventListener('scroll', update);
+  }, [state.conversationId, state.messages.length]);
+
+  // Follow a reply as it is written — but only for someone already at the bottom.
+  // Scrolling up to re-read something must not be undone by the next words arriving.
+  const streamedLength = pending?.streamingText?.length ?? 0;
+  useEffect(() => {
+    if (streamedLength === 0 || !followingRef.current) return;
+    endRef.current?.scrollIntoView({ block: 'end' });
+  }, [streamedLength]);
 
   async function handleSend(text: string) {
     // An edit replaces the message it came from; anything else is a new message.
@@ -133,8 +158,13 @@ export function ChatPage() {
               ) : (
                 <div key={`pending-${entry.pending.clientMessageId}`} className="flex flex-col gap-3">
                   <UserMessage text={entry.pending.text} />
+                  {/* The dots until the reply starts arriving, then the reply itself. */}
                   {entry.pending.kind === 'waiting' && entry.pending.startedAt !== undefined ? (
-                    <WaitingNotice startedAt={entry.pending.startedAt} />
+                    entry.pending.streamingText ? (
+                      <StreamingReply text={entry.pending.streamingText} clientMessageId={entry.pending.clientMessageId} />
+                    ) : (
+                      <WaitingNotice startedAt={entry.pending.startedAt} />
+                    )
                   ) : null}
                   {state.failure ? (
                     <SendFailureNotice failure={state.failure} onRetry={() => void retry()} onDismiss={dismissFailure} />

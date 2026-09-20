@@ -4,6 +4,7 @@ import { Link } from 'react-router';
 import { isApiError, toUserFacingError } from '../api/errors.ts';
 import { Button } from '../ui/Button.tsx';
 import type { SendFailure } from './conversation-state.ts';
+import { MarkdownContent } from './MarkdownContent.tsx';
 
 /**
  * Seconds since the attempt started. A ticking clock is kept in state and the elapsed
@@ -43,10 +44,10 @@ function TypingDots() {
 }
 
 /**
- * The waiting state, shown from the moment a message is sent until the reply arrives or
- * the attempt fails. The dots animate to show the request is being worked on, but the
- * words stay honest: a reply arrives complete, so nothing here pretends text is being
- * typed into place. Stop lives in the composer, in place of Send.
+ * The waiting state, shown from the moment a message is sent until the first of the
+ * reply arrives — routing and retrieval both happen before the model writes anything,
+ * so there is a real pause to account for. Once text starts coming, StreamingReply
+ * takes over. Stop lives in the composer, in place of Send.
  *
  * The status text stays stable for screen readers; only the seconds change visually, so
  * the live region does not announce a new number every second.
@@ -66,6 +67,30 @@ export function WaitingNotice({ startedAt }: WaitingNoticeProps) {
           </span>
         ) : null}
       </p>
+    </div>
+  );
+}
+
+export interface StreamingReplyProps {
+  text: string;
+  clientMessageId: string;
+}
+
+/**
+ * The reply as it is being written.
+ *
+ * Provisional, and only that: the pages it drew on, the "general information" label
+ * and any correcting notes arrive with the saved reply, which takes this one's place
+ * the moment it lands. So nothing here is presented as final — no sources, no
+ * citations — and the finished reply is what gets announced, once, by the page. A
+ * live region here would read a moving target aloud.
+ */
+export function StreamingReply({ text, clientMessageId }: StreamingReplyProps) {
+  return (
+    <div className="measure" aria-busy="true">
+      <MarkdownContent content={text} sources={[]} messageId={`streaming-${clientMessageId}`} />
+      {/* A cursor where the next words will go: the reply is still being written. */}
+      <span aria-hidden="true" className="mt-1 inline-block h-4 w-0.5 animate-pulse bg-muted align-text-bottom" />
     </div>
   );
 }

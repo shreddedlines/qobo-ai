@@ -3,7 +3,7 @@ import type { SendMessageResponse } from '../api/types.ts';
 import { idForAttempt, type ChatAction, type ChatState } from './conversation-state.ts';
 
 export interface SendDeps {
-  client: Pick<ApiClient, 'sendMessage'>;
+  client: Pick<ApiClient, 'streamMessage'>;
   dispatch: (action: ChatAction) => void;
   newId: () => string;
   now: () => number;
@@ -28,6 +28,10 @@ export interface SendInput {
  * testable: the user message is shown before the request goes out (optimistic), the
  * saved copies replace it on success, and Stop is recorded as stopped rather than failed.
  *
+ * The reply is reported as it is written, but only the saved exchange is ever kept:
+ * `send/succeeded` drops the streamed draft and stores what the API returned, so what
+ * stays on screen is what a reload would fetch.
+ *
  * Returns the saved exchange, or null when the attempt did not produce one.
  */
 export async function runSend({ state, text, deps, signal, replaceMessageId }: SendInput): Promise<SendMessageResponse | null> {
@@ -44,8 +48,12 @@ export async function runSend({ state, text, deps, signal, replaceMessageId }: S
   });
 
   try {
-    const response = await deps.client.sendMessage(
+    const response = await deps.client.streamMessage(
       { message, clientMessageId, conversationId: state.conversationId, ...(replaceMessageId ? { replaceMessageId } : {}) },
+      {
+        onDelta: (text) => deps.dispatch({ type: 'send/delta', text }),
+        onReset: () => deps.dispatch({ type: 'send/reset' }),
+      },
       signal ? { signal } : {},
     );
     deps.dispatch({ type: 'send/succeeded', response, ...(replaceMessageId ? { replacedMessageId: replaceMessageId } : {}) });

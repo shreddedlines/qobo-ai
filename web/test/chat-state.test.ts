@@ -73,7 +73,7 @@ describe('optimistic sending', () => {
 
   it('shows the user message immediately, before any reply exists', () => {
     const state = reduce(initialChatState, started);
-    assert.deepEqual(pendingEntry(state), { kind: 'waiting', clientMessageId: 'c1', text: 'What do your plans include?', startedAt: 1_000 });
+    assert.deepEqual(pendingEntry(state), { kind: 'waiting', clientMessageId: 'c1', text: 'What do your plans include?', startedAt: 1_000, streamingText: '' });
     assert.equal(isSending(state), true);
     assert.deepEqual(state.messages, [], 'the optimistic message is not mixed into saved messages');
   });
@@ -155,13 +155,13 @@ describe('client message ids', () => {
   });
 });
 
-function fakeDeps(sendMessage: SendDeps['client']['sendMessage'], ids: string[] = ['generated-id']): { deps: SendDeps; actions: ChatAction[] } {
+function fakeDeps(streamMessage: SendDeps['client']['streamMessage'], ids: string[] = ['generated-id']): { deps: SendDeps; actions: ChatAction[] } {
   const actions: ChatAction[] = [];
   const queue = [...ids];
   return {
     actions,
     deps: {
-      client: { sendMessage },
+      client: { streamMessage },
       dispatch: (action) => actions.push(action),
       newId: () => queue.shift() ?? 'exhausted',
       now: () => 1_234,
@@ -208,7 +208,7 @@ describe('runSend', () => {
 
   it('treats an aborted request as stopped, not failed', async () => {
     const controller = new AbortController();
-    const { deps, actions } = fakeDeps(async (_request, options) => {
+    const { deps, actions } = fakeDeps(async (_request, _handlers, options) => {
       controller.abort();
       throw Object.assign(new Error('aborted'), { name: 'AbortError', signal: options?.signal });
     });

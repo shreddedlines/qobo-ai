@@ -173,7 +173,7 @@ describe('what the conversation shows during an edit', () => {
   it('keeps an ordinary new message at the bottom', () => {
     const entries = timeline(chatReducer(loaded, { type: 'send/start', clientMessageId: 'c2', text: 'a new question', startedAt: 1 }));
     assert.equal(entries.length, 5);
-    assert.deepEqual(entries.at(-1), { kind: 'pending', pending: { kind: 'waiting', clientMessageId: 'c2', text: 'a new question', startedAt: 1 } });
+    assert.deepEqual(entries.at(-1), { kind: 'pending', pending: { kind: 'waiting', clientMessageId: 'c2', text: 'a new question', startedAt: 1, streamingText: '' } });
   });
 
   it('puts a failed edit last, with the original exchange still visible', () => {
@@ -195,17 +195,17 @@ describe('what the conversation shows during an edit', () => {
 
   it('does not lose the pending entry if the target disappears mid-flight', () => {
     const orphaned: ChatState = { ...chatReducer(loaded, start), messages: [] };
-    assert.deepEqual(timeline(orphaned), [{ kind: 'pending', pending: { kind: 'waiting', clientMessageId: 'c1', text: editedUser.content, startedAt: 1_000, replacesMessageId: 'u1' } }]);
+    assert.deepEqual(timeline(orphaned), [{ kind: 'pending', pending: { kind: 'waiting', clientMessageId: 'c1', text: editedUser.content, startedAt: 1_000, replacesMessageId: 'u1', streamingText: '' } }]);
   });
 });
 
-function fakeDeps(sendMessage: SendDeps['client']['sendMessage'], ids: string[] = ['generated-id']): { deps: SendDeps; actions: ChatAction[] } {
+function fakeDeps(streamMessage: SendDeps['client']['streamMessage'], ids: string[] = ['generated-id']): { deps: SendDeps; actions: ChatAction[] } {
   const actions: ChatAction[] = [];
   const queue = [...ids];
   return {
     actions,
     deps: {
-      client: { sendMessage },
+      client: { streamMessage },
       dispatch: (action) => actions.push(action),
       newId: () => queue.shift() ?? 'exhausted',
       now: () => 1_234,
