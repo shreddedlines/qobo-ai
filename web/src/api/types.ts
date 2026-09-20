@@ -71,3 +71,40 @@ export interface HealthResponse {
   status: 'ok' | 'degraded';
   database?: 'ok' | 'unavailable';
 }
+
+/**
+ * Server-sent events from POST /api/chat/stream.
+ *
+ * Mirrors the StreamEvent union in api/src/chat/routes.ts; contract.test.ts reads the
+ * backend source and fails if the two drift apart.
+ */
+export const STREAM_EVENTS = ['delta', 'reset', 'done', 'error'] as const;
+export type StreamEvent = (typeof STREAM_EVENTS)[number];
+
+export interface StreamDeltaData {
+  text: string;
+}
+
+export interface StreamErrorData {
+  code: string;
+  message: string;
+  details?: unknown;
+}
+
+export type StreamFrame =
+  | { event: 'delta'; data: StreamDeltaData }
+  | { event: 'reset'; data: unknown }
+  | { event: 'done'; data: SendMessageResponse }
+  | { event: 'error'; data: StreamErrorData };
+
+/**
+ * What a caller is told while the reply is being written. Both are display-only: the
+ * answer that counts is the one the request resolves with, because the label, the
+ * resolved citations and any guard notes are added only when it is finished.
+ */
+export interface StreamHandlers {
+  /** More provisional answer text. Internal citation ids are already removed. */
+  onDelta(text: string): void;
+  /** Drop everything received so far — the reply is being written again from the start. */
+  onReset?(): void;
+}

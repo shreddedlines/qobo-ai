@@ -1,4 +1,5 @@
-import { ApiError, API_ERROR_CODES, type ApiErrorCode } from './errors.ts';
+import { ApiError, apiErrorCodeForStatus, isApiErrorCode } from './errors.ts';
+import { streamChatMessage } from './stream.ts';
 import type {
   ConversationListResponse,
   ConversationMessagesResponse,
@@ -6,6 +7,7 @@ import type {
   HealthResponse,
   SendMessageRequest,
   SendMessageResponse,
+  StreamHandlers,
 } from './types.ts';
 
 export interface ApiClientOptions {
@@ -39,28 +41,16 @@ export interface ApiClient {
   /** Changes a conversation's title. Returns the conversation as it is now stored. */
   renameConversation(conversationId: string, title: string, options?: RequestOptions): Promise<ConversationSummary>;
   sendMessage(request: SendMessageRequest, options?: RequestOptions): Promise<SendMessageResponse>;
+  /**
+   * Sends a message and reports the reply as it is written. Resolves with the same
+   * saved exchange `sendMessage` resolves with; the streamed text is provisional.
+   */
+  streamMessage(request: SendMessageRequest, handlers: StreamHandlers, options?: RequestOptions): Promise<SendMessageResponse>;
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 /** The API's own chat timeout is 45s; allow a little more before giving up locally. */
 export const CHAT_TIMEOUT_MS = 50_000;
-
-function isApiErrorCode(value: unknown): value is ApiErrorCode {
-  return typeof value === 'string' && (API_ERROR_CODES as readonly string[]).includes(value);
-}
-
-/** Maps an HTTP status to a code when the body is missing or malformed. */
-function codeForStatus(status: number): ApiErrorCode {
-  if (status === 401) return 'unauthorized';
-  if (status === 404) return 'not_found';
-  if (status === 409) return 'conflict';
-  if (status === 413) return 'payload_too_large';
-  if (status === 429) return 'rate_limited';
-  if (status === 503) return 'service_unavailable';
-  if (status === 504) return 'timeout';
-  if (status >= 500) return 'internal_error';
-  return 'bad_request';
-}
 
 export function createApiClient({ baseUrl, getAccessToken, timeoutMs = DEFAULT_TIMEOUT_MS, fetchImpl = fetch }: ApiClientOptions): ApiClient {
   const origin = baseUrl.replace(/\/+$/, '');
@@ -106,7 +96,7 @@ export function createApiClient({ baseUrl, getAccessToken, timeoutMs = DEFAULT_T
 
     if (!response.ok) {
       const body = (await response.json().catch(() => undefined)) as { error?: { code?: unknown; message?: unknown; details?: unknown } } | undefined;
-      const code = isApiErrorCode(body?.error?.code) ? body.error.code : codeForStatus(response.status);
+      const code = isApiErrorCode(body?.error?.code) ? body.error.code : apiErrorCodeForStatus(response.status);
       const message = typeof body?.error?.message === 'string' ? body.error.message : `Request failed with HTTP ${response.status}`;
       throw new ApiError({ status: response.status, code, message, details: body?.error?.details, requestId });
     }
@@ -163,6 +153,21 @@ export function createApiClient({ baseUrl, getAccessToken, timeoutMs = DEFAULT_T
         timeoutMs: CHAT_TIMEOUT_MS,
         ...options,
       }))!;
+    },
+
+    async streamMessage(payload, handlers, options = {}) {
+      const token = await getAccessToken();
+      if (!token) throw new ApiError({ status: 401, code: 'unauthorized', message: 'Not signed in' });
+
+      return streamChatMessage({
+        url: `${origin}/api/chat/stream`,
+        accessToken: token,
+        body: payload,
+        handlers,
+        fetchImpl,
+        timeoutMs: options.timeoutMs ?? CHAT_TIMEOUT_MS,
+        signal: options.signal,
+      });
     },
   };
 }

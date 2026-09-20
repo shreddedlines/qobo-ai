@@ -49,6 +49,24 @@ export function isApiError(error: unknown): error is ApiError {
   return error instanceof ApiError;
 }
 
+/** True for a code the API is allowed to send, so an unknown one cannot slip into the UI. */
+export function isApiErrorCode(value: unknown): value is ApiErrorCode {
+  return typeof value === 'string' && (API_ERROR_CODES as readonly string[]).includes(value);
+}
+
+/** The code to assume when the body is missing or unreadable. */
+export function apiErrorCodeForStatus(status: number): ApiErrorCode {
+  if (status === 401) return 'unauthorized';
+  if (status === 404) return 'not_found';
+  if (status === 409) return 'conflict';
+  if (status === 413) return 'payload_too_large';
+  if (status === 429) return 'rate_limited';
+  if (status === 503) return 'service_unavailable';
+  if (status === 504) return 'timeout';
+  if (status >= 500) return 'internal_error';
+  return 'bad_request';
+}
+
 /** True when sending the same request again could reasonably succeed. */
 export function isRetryable(error: unknown): boolean {
   if (!isApiError(error)) return false;

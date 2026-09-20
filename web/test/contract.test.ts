@@ -4,7 +4,7 @@ import path from 'node:path';
 import { describe, it } from 'node:test';
 
 import { API_ERROR_CODES } from '../src/api/errors.ts';
-import { CHAT_MESSAGE_FIELDS, INTENTS, MAX_MESSAGE_CHARS, MESSAGE_STATUSES } from '../src/api/types.ts';
+import { CHAT_MESSAGE_FIELDS, INTENTS, MAX_MESSAGE_CHARS, MESSAGE_STATUSES, STREAM_EVENTS } from '../src/api/types.ts';
 
 /**
  * The frontend mirrors the backend contract by hand (separate packages, no codegen).
@@ -58,6 +58,11 @@ describe('frontend/backend contract', () => {
     const backendCodes = [...block[1]!.matchAll(/'([^']+)'/g)].map((m) => m[1]!);
     const missing = backendCodes.filter((code) => !(API_ERROR_CODES as readonly string[]).includes(code));
     assert.deepEqual(missing, [], `frontend has no handling for: ${missing.join(', ')}`);
+  });
+
+  it('mirrors the streaming event names', async () => {
+    const source = await read('chat/routes.ts');
+    assert.deepEqual(unionValues(source, 'StreamEvent'), [...STREAM_EVENTS]);
   });
 
   it('matches the chat request fields the backend validates', async () => {
