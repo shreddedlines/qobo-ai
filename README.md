@@ -101,7 +101,9 @@ Only these three reach the browser. The app refuses to start if `VITE_SUPABASE_P
 
 `npm run eval` sends every case in [`eval/questions.yaml`](eval/questions.yaml) through the live chat pipeline and scores it with rule-based assertions: the router's intent, the reply's status, expected and forbidden content, and the pages cited. A newer grounding check resolves every QOBO citation against the reviewed page list in `kb/snapshots/manifest.json`, so an invented `qobo.dev` URL fails the case — something no substring check can catch. There are no reference answers and no model-as-judge, so these are pass/fail assertions rather than a measure of answer quality.
 
-Latest full run (2026-09-20), **34 of 34 cases passed** — a 100% pass rate against those assertions:
+The figures below are separate results from the same curated 34-case suite, each measured on its own evaluation run.
+
+**34 of 34 cases passed** — a 100% pass rate against those assertions:
 
 | Tag | Passed | Tag | Passed |
 | --- | --- | --- | --- |
@@ -111,9 +113,24 @@ Latest full run (2026-09-20), **34 of 34 cases passed** — a 100% pass rate aga
 | Statistics | 2/2 | | |
 
 - **Citations:** 21 of the 34 cases use the citation/grounding assertions (`citesAll`, `citesOnly`, `maxSources`, `groundedInKb`). Across them, **41 individual QOBO citations** were resolved against the approved 25-page knowledge base, with **0 fabricated QOBO URLs**.
-- **Static and unit checks:** 329/329 API tests pass; typecheck and lint pass.
+- **Static and unit checks:** 337/337 API tests pass; typecheck and lint pass.
 
-> **Which model this measured.** That run was served almost entirely by the fallback `gemini-3.5-flash-lite`; only `pricing-free-trial` was answered by the configured primary `gemini-3.7-flash`. The 34/34 result is therefore **not** a benchmark of `gemini-3.7-flash`.
+> **Which model served these answers.** Almost entirely the fallback `gemini-3.5-flash-lite`; a single case, `pricing-free-trial`, was answered by the configured primary `gemini-3.7-flash`. The 34/34 result is therefore **not** a benchmark of `gemini-3.7-flash`.
+
+### Intent classification
+
+The report also scores the router as a classifier, using each case's expected intent as the gold label. This is a separate measurement over the same suite, not a re-reading of the pass-rate figures above. **33 of 33** unambiguous cases were classified correctly:
+
+| Metric | Value |
+| --- | --- |
+| Accuracy | 100% (33/33) |
+| Macro precision | 1.000 |
+| Macro recall | 1.000 |
+| Macro F1 | 1.000 |
+
+`general-seo-and-qobo` is excluded from these figures: it accepts either `general` or `qobo`, so it has no single gold label.
+
+> **These are results on the curated suite, not a claim of real-world or production accuracy.** They rest on 33 scored cases across four intent classes, with only 3 examples each for `general` and `smalltalk`, so the per-class figures carry wide error bars. `answer.intent` is the effective end-to-end pipeline intent, not necessarily the raw router prediction — the router's own label is not recorded. The intent evaluation was served **entirely** by the fallback `gemini-3.5-flash-lite`.
 
 ## Deployed architecture
 
