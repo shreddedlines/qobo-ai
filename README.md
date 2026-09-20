@@ -97,6 +97,24 @@ Three variables are required at **build** time, because Vite inlines them (see [
 
 Only these three reach the browser. The app refuses to start if `VITE_SUPABASE_PUBLISHABLE_KEY` holds a secret key (`sb_secret_…`), and `npm run build` fails if any server secret ends up in the bundle. Every AI, search and service-role credential stays on the API.
 
+## Evaluation
+
+`npm run eval` sends every case in [`eval/questions.yaml`](eval/questions.yaml) through the live chat pipeline and scores it with rule-based assertions: the router's intent, the reply's status, expected and forbidden content, and the pages cited. A newer grounding check resolves every QOBO citation against the reviewed page list in `kb/snapshots/manifest.json`, so an invented `qobo.dev` URL fails the case — something no substring check can catch. There are no reference answers and no model-as-judge, so these are pass/fail assertions rather than a measure of answer quality.
+
+Latest full run (2026-09-20), **34 of 34 cases passed** — a 100% pass rate against those assertions:
+
+| Tag | Passed | Tag | Passed |
+| --- | --- | --- | --- |
+| QOBO | 19/19 | Off-topic | 8/8 |
+| Routing | 17/17 | Web | 4/4 |
+| Pricing | 8/8 | Smalltalk | 3/3 |
+| Statistics | 2/2 | | |
+
+- **Citations:** 21 of the 34 cases use the citation/grounding assertions (`citesAll`, `citesOnly`, `maxSources`, `groundedInKb`). Across them, **41 individual QOBO citations** were resolved against the approved 25-page knowledge base, with **0 fabricated QOBO URLs**.
+- **Static and unit checks:** 329/329 API tests pass; typecheck and lint pass.
+
+> **Which model this measured.** That run was served almost entirely by the fallback `gemini-3.5-flash-lite`; only `pricing-free-trial` was answered by the configured primary `gemini-3.7-flash`. The 34/34 result is therefore **not** a benchmark of `gemini-3.7-flash`.
+
 ## Deployed architecture
 
 ```
