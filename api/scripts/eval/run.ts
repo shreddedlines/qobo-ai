@@ -18,6 +18,7 @@ import type { ChatReply } from '../../src/chat/chat-service.ts';
 import { loadEnv } from '../../src/config/env.ts';
 import { createChatRuntime } from '../../src/rag/setup.ts';
 import { checkAnswer, evalSuiteSchema, type EvalCase } from './lib/checks.ts';
+import { intentMetrics, type IntentMetrics, type IntentPrediction } from './lib/metrics.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../../..');
 
@@ -35,6 +36,46 @@ interface CaseResult {
 
 function escapeCell(text: string): string {
   return text.replace(/\|/g, '\\|').replace(/\n/g, ' ');
+}
+
+/** Reporting order for the intent classes, so the matrix reads the same way every run. */
+const INTENT_LABELS = ['qobo', 'general', 'off_topic', 'smalltalk'] as const;
+
+const ratio3 = (value: number): string => value.toFixed(3);
+const percent1 = (value: number): string => `${(value * 100).toFixed(1)}%`;
+
+/** The confusion matrix and the scores derived from it, as report sections. */
+function intentSection(metrics: IntentMetrics): string[] {
+  const header = ['## Intent classification', ''];
+  if (metrics.scored === 0) return [...header, '_No case declared a single expected intent, so no metrics were computed._', ''];
+
+  const excluded =
+    metrics.excluded.length === 0
+      ? 'none'
+      : metrics.excluded.map((entry) => `${entry.id} (${entry.reason})`).join(', ');
+
+  return [
+    ...header,
+    `- Scored **${metrics.scored}** of ${metrics.scored + metrics.excluded.length} cases; excluded: ${excluded}`,
+    `- **Accuracy ${percent1(metrics.accuracy)}** (${metrics.correct}/${metrics.scored})`,
+    `- **Macro** precision ${ratio3(metrics.macroPrecision)}, recall ${ratio3(metrics.macroRecall)}, F1 ${ratio3(metrics.macroF1)} — averaged over ${metrics.macroLabels.join(', ')}`,
+    '',
+    '### Confusion matrix',
+    '',
+    `| expected \\ predicted | ${metrics.labels.join(' | ')} |`,
+    `| --- | ${metrics.labels.map(() => '---').join(' | ')} |`,
+    ...metrics.labels.map((label, row) => `| **${label}** | ${metrics.matrix[row]!.join(' | ')} |`),
+    '',
+    '### Per class',
+    '',
+    '| Intent | Support | Predicted | TP | FP | FN | Precision | Recall | F1 |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    ...metrics.perClass.map(
+      (c) =>
+        `| ${c.label} | ${c.support} | ${c.predicted} | ${c.truePositives} | ${c.falsePositives} | ${c.falseNegatives} | ${ratio3(c.precision)} | ${ratio3(c.recall)} | ${ratio3(c.f1)} |`,
+    ),
+    '',
+  ];
 }
 
 /** Cited pages and which citation checks the case applied, so the new checks are visible per case. */
@@ -94,6 +135,14 @@ async function main(): Promise<void> {
     }
   }
 
+  const predictions: IntentPrediction[] = results.map((r) => ({
+    id: r.testCase.id,
+    ...(r.testCase.expect.intent ? { gold: r.testCase.expect.intent } : {}),
+    ...(r.answer ? { predicted: r.answer.intent } : {}),
+    ...(r.testCase.expect.intentIn ? { ambiguous: true } : {}),
+  }));
+  const intents = intentMetrics(predictions, INTENT_LABELS);
+
   const passed = results.filter((r) => r.failures.length === 0).length;
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const label = only.length ? 'only' : tags.length ? tags.join('+') : 'all';
@@ -144,6 +193,7 @@ async function main(): Promise<void> {
         .concat('|');
     }),
     '',
+    ...intentSection(intents),
     '## Answers',
     ...results.flatMap((r) => [
       '',
@@ -162,6 +212,7 @@ async function main(): Promise<void> {
   await writeFile(path.join(outDir, `${stamp}-${label}.md`), markdown, 'utf8');
   await writeFile(path.join(outDir, `${stamp}-${label}.json`), `${JSON.stringify(results, null, 2)}\n`, 'utf8');
   console.log(`\nPassed ${passed}/${results.length}. Report: eval/results/${stamp}-${label}.md`);
+  console.log(`Intent: accuracy ${percent1(intents.accuracy)} (${intents.correct}/${intents.scored}), macro F1 ${ratio3(intents.macroF1)}`);
   if (passed !== results.length) process.exitCode = 1;
 }
 
